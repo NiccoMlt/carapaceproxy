@@ -1,0 +1,17 @@
+name: 'Test Report'
+on:
+  workflow_run:
+    workflows: ['pr-validation']
+    types:
+      - completed
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        uses: dorny/test-reporter@v1
+        with:
+          name: Maven Tests
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: true
