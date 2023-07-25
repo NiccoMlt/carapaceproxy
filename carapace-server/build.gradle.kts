@@ -6,26 +6,68 @@
 
 plugins {
     id("org.carapaceproxy.java-conventions")
+    id("com.intershop.gradle.javacc") version "4.0.0"
+    id("io.freefair.lombok") version "6.5.1"
+    id("com.github.spotbugs") version "5.0.12"
+}
+
+javacc {
+    // configuration container for all javacc configurations
+    configs {
+        register("requestmatcher") {
+            inputFile = file("src/main/javacc/RequestMatchParser.jj")
+            packageName = "org.carapaceproxy.server.mapper.requestmatcher.parser"
+        }
+    }
+    javaCCVersion = "4.0"
+}
+
+lombok {
+    version.set("1.18.22")
+}
+
+spotbugs {
+    version = "4.5.3"
+    effort.set(com.github.spotbugs.snom.Effort.MAX)
+    maxHeapSize.set("4g")
 }
 
 dependencies {
-    implementation("io.projectreactor.netty:reactor-netty-core:1.0.23")
-    implementation("io.projectreactor.netty:reactor-netty-http:1.0.23")
+    implementation(platform("io.projectreactor:reactor-bom:2020.0.23"))
+    implementation("io.projectreactor.netty:reactor-netty-core")
+    implementation("io.projectreactor.netty:reactor-netty-http")
     implementation("io.netty:netty-tcnative-boringssl-static:2.0.54.Final")
-    implementation("org.shredzone.acme4j:acme4j-client:2.12")
-    implementation("org.shredzone.acme4j:acme4j-utils:2.12")
+    implementation("org.shredzone.acme4j:acme4j-client:2.12") {
+        exclude(group = "org.bouncycastle")
+    }
+    implementation("org.shredzone.acme4j:acme4j-utils:2.12") {
+        exclude(group = "org.bouncycastle")
+    }
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
-    implementation("software.amazon.awssdk:route53:2.17.113")
+    implementation("software.amazon.awssdk:route53:2.17.113") {
+        exclude(group = "io.netty")
+    }
     implementation("com.github.ben-manes.caffeine:caffeine:3.0.5")
     implementation("org.antlr:ST4:4.3.1")
-    implementation("org.apache.zookeeper:zookeeper:3.7.0")
+    implementation("org.apache.zookeeper:zookeeper:3.7.0") {
+        exclude(group = "org.slf4j", module = "slf4j-log4j12")
+        exclude(group = "log4j", module = "log4j")
+        exclude(group = "commons-cli", module = "commons-cli")
+        exclude(group = "org.apache.yetus")
+        exclude(group = "io.netty")
+    }
     implementation("org.apache.curator:curator-recipes:5.2.0")
     implementation("io.prometheus:simpleclient:0.14.1")
     implementation("io.prometheus:simpleclient_hotspot:0.14.1")
     implementation("io.prometheus:simpleclient_servlet:0.14.1")
-    implementation("org.apache.bookkeeper.stats:prometheus-metrics-provider:4.14.4")
+    implementation("org.apache.bookkeeper.stats:prometheus-metrics-provider:4.14.4") {
+        exclude(group = "io.netty")
+    }
     implementation("io.micrometer:micrometer-registry-prometheus:1.8.2")
-    implementation("org.herddb:herddb-jdbc:0.24.0")
+    implementation("org.herddb:herddb-jdbc:0.24.0") {
+        exclude(group = "io.netty")
+        exclude(group = "org.bouncycastle")
+    }
     implementation("org.apache.commons:commons-lang3:3.12.0")
     implementation("org.apache.commons:commons-pool2:2.11.1")
     implementation("commons-io:commons-io:2.11.0")
@@ -45,7 +87,6 @@ dependencies {
     implementation("javax.activation:javax.activation-api:1.2.0")
     implementation("org.slf4j:slf4j-api:1.7.33")
     implementation("com.google.guava:guava:31.0.1-jre")
-    implementation("org.projectlombok:lombok:1.18.22")
     runtimeOnly("org.glassfish.jersey.media:jersey-media-json-jackson:2.35")
     runtimeOnly("org.slf4j:slf4j-jdk14:1.7.33")
     runtimeOnly(project(":carapace-ui"))
@@ -57,7 +98,10 @@ dependencies {
     testImplementation("org.mockito:mockito-core:3.12.4")
     testImplementation("org.apache.curator:curator-test:5.2.0")
     testImplementation("org.hamcrest:hamcrest:2.2")
-    compileOnly("com.github.spotbugs:spotbugs-annotations:4.5.3")
+    spotbugs("org.ow2.asm:asm:9.2")
+    compileOnly("com.github.spotbugs:spotbugs-annotations:4.5.3") {
+        exclude(group = "com.google.code.findbugs", module = "jsr305")
+    }
 }
 
 description = "Carapace :: Server"

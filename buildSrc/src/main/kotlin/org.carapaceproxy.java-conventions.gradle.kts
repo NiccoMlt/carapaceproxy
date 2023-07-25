@@ -26,11 +26,71 @@ repositories {
 
 group = "org.carapaceproxy"
 version = "1.9.0-SNAPSHOT"
-java.sourceCompatibility = JavaVersion.VERSION_1_8
+java.sourceCompatibility = JavaVersion.VERSION_17
 
 publishing {
-    publications.create<MavenPublication>("maven") {
-        from(components["java"])
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+            pom {
+                description.set("A Distributed Java Reverse Proxy")
+                licenses {
+                    license {
+                        name.set("Apache License, Version 2.0")
+                        url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
+                    }
+                }
+                scm {
+                    url.set("https://github.com/diennea/carapaceproxy.git")
+                    connection.set("scm:git:https://github.com/diennea/carapaceproxy.git")
+                    developerConnection.set("scm:git:https://github.com/diennea/carapaceproxy.git")
+                    tag.set("release/1.3")
+                }
+                developers {
+                    developer {
+                        id.set("eolivelli")
+                        name.set("Enrico Olivelli")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("nicolo.boschi")
+                        name.set("Nicolò Boschi")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("paolo.venturi")
+                        name.set("Paolo Venturi")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("francesco.caliumi")
+                        name.set("Francesco Caliumi")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("dennis.mercuriali")
+                        name.set("Dennis Mercuriali")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("matteo.minardi")
+                        name.set("Matteo Minardi")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("hamado.dene")
+                        name.set("Hamado Dene")
+                        organization.set("Diennea")
+                    }
+                    developer {
+                        id.set("alessandro.luccaroni")
+                        name.set("Alessandro Luccaroni")
+                        organization.set("Diennea")
+                    }
+                }
+            }
+        }
     }
 }
 
