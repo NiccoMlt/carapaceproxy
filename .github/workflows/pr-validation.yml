@@ -44,7 +44,7 @@ jobs:
           cache: 'maven'
       - name: 'Build and test with Maven'
         run: mvn verify
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         if: always()
         with:
           name: test-results # as expected by pr-validation-report workflow
