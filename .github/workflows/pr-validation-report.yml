@@ -17,5 +17,5 @@ jobs:
         with:
           artifact: test-results # as named in pr-validation workflow
           name: Maven Tests
-          path: '*.xml' # (inside artifact .zip)
+          path: carapace-*/target/surefire-reports/*.xml # (inside artifact .zip)
           reporter: java-junit
