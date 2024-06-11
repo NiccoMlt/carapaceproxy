@@ -16,14 +16,13 @@ on:
 permissions:
   contents: write
   discussions: write
+  packages: write
 
 jobs:
   release:
     if: ${{ github.ref_name == github.event.repository.default_branch || (inputs.bump == 'hotfix' && startsWith(github.ref_name, 'release/')) }}
     name: 'Perform ${{ inputs.bump }} release'
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: 'Checkout ${{ github.ref_name }} branch'
         uses: actions/checkout@v4
@@ -77,6 +76,8 @@ jobs:
           } >> "$GITHUB_OUTPUT"
       - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./mvnw release:clean release:branch \
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
@@ -90,6 +91,8 @@ jobs:
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
       - if: ${{ inputs.bump == 'hotfix' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ./mvnw release:clean release:prepare release:perform \
               -Dtag=${{ steps.compute_versions.outputs.tag }} \
