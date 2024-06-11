@@ -82,6 +82,12 @@ jobs:
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
               -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
+          ./mvnw release:prepare release:perform \
+              -DupdateBranchVersions=false \
+              -DupdateWorkingCopyVersions=false \
+              -Dtag=${{ steps.compute_versions.outputs.tag }} \
+              -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
+              -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
       - if: ${{ inputs.bump == 'hotfix' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
         run: |
