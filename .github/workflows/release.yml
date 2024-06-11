@@ -78,7 +78,7 @@ jobs:
       - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
         run: |
-          ./mvnw release:clean release:branch release:perform \
+          ./mvnw release:clean release:branch \
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
               -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
