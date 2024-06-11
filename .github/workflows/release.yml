@@ -109,19 +109,4 @@ jobs:
           name: Release ${{ steps.compute_versions.outputs.release_version }}
           draft: false
           prerelease: false
-          files: |
-            carapace-server/target/carapace-server-*
-#      - name: 'Upload ZIP artifact'
-#        uses: actions/upload-release-asset@v1
-#        with:
-#          upload_url: ${{ steps.create_release.outputs.upload_url }}
-#          asset_path: carapace-server/target/carapace-server-*.zip
-#          asset_name: carapace-server-${{ steps.compute_versions.outputs.release_version }}.zip
-#          asset_content_type: application/zip
-#      - name: 'Upload JAR artifact'
-#        uses: actions/upload-release-asset@v1
-#        with:
-#          upload_url: ${{ steps.create_release.outputs.upload_url }}
-#          asset_path: carapace-server/target/carapace-server-*.jar
-#          asset_name: carapace-server-${{ steps.compute_versions.outputs.release_version }}.jar
-#          asset_content_type: application/java-archive
+          files: carapace-server/target/carapace-server-*
