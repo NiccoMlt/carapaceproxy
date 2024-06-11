@@ -71,7 +71,7 @@
     </modules>
 
     <scm>
-        <url>git@github.com:NiccoMlt/carapaceproxy.git</url>
+        <url>https://github.com/NiccoMlt/carapaceproxy.git</url>
         <connection>scm:git:${project.scm.url}</connection>
         <developerConnection>scm:git:${project.scm.url}</developerConnection>
         <tag>HEAD</tag>
