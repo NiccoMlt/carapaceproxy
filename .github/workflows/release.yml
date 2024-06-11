@@ -78,18 +78,17 @@ jobs:
       - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
         run: |
-          ./mvnw release:clean release:branch \
+          ./mvnw release:clean release:branch release:perform \
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
               -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
       - if: ${{ inputs.bump == 'hotfix' }}
         name: 'Release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
         run: |
-          ./mvnw release:clean release:prepare \
+          ./mvnw release:clean release:prepare release:perform \
               -Dtag=${{ steps.compute_versions.outputs.tag }} \
               -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.release_development_version }}
-      - run: ./mvnw release:perform
 #      - name: 'Generate the artifacts'
 #        run: ./mvnw clean install -Pproduction -DskipTests
 #      - name: 'Create GitHub Release'
