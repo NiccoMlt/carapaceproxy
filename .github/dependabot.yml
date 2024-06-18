@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+  - package-ecosystem: "npm"
+    directory: "carapace-ui/src/main/webapp"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "build(ui)"
+      include: "scope"
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "build(server)"
+      include: "scope"
