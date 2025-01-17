@@ -71,7 +71,7 @@ jobs:
             ;;
           minor)
             new_minor=$((minor + 1))
-            branch_name="release/${major}.${new_minor}"
+            branch_name="release/${major}.${minor}"
             release_version="${major}.${minor}.0"
             release_development_version="${major}.${new_minor}.1-${qualifier}"
             master_development_version="${release_development_version}"
