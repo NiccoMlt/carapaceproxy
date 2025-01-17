@@ -74,7 +74,7 @@
         <url>git@github.com:NiccoMlt/carapaceproxy.git</url>
         <connection>scm:git:${project.scm.url}</connection>
         <developerConnection>scm:git:${project.scm.url}</developerConnection>
-        <tag>release/3.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <distributionManagement>
