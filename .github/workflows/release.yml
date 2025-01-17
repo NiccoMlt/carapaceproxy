@@ -115,6 +115,12 @@ jobs:
               -Dtag=${{ steps.compute_versions.outputs.tag }} \
               -Darguments='-DskipTests=true'
 
+      - name: 'Perform release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./mvnw release:perform -Darguments='-DskipTests=true'
+
       - name: 'Create GitHub Release'
         id: create_release
         uses: softprops/action-gh-release@v2
