@@ -4,7 +4,7 @@
 
     <groupId>org.carapaceproxy</groupId>
     <artifactId>carapace-parent</artifactId>
-    <version>4.2.1-SNAPSHOT</version>
+    <version>4.3.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Carapace :: Parent</name>
@@ -74,7 +74,7 @@
         <url>git@github.com:NiccoMlt/carapaceproxy.git</url>
         <connection>scm:git:${project.scm.url}</connection>
         <developerConnection>scm:git:${project.scm.url}</developerConnection>
-        <tag>HEAD</tag>
+        <tag>release/4.2</tag>
     </scm>
 
     <distributionManagement>
