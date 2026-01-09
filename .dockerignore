@@ -1,0 +1,9 @@
+**/target/
+**/node/
+**/node_modules/
+*.iml
+.idea/
+.git/
+carapace-server/*.java.pid
+carapace-server/*.service.log
+access.log

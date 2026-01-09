@@ -17,8 +17,7 @@ The server will start at `hostname:port` as defined in the server.properties fil
 
 You can build carapace docker image by running:
 ```
-mvn clean install -DskipTests -Pproduction
-docker/build.sh
+docker build -t carapace/carapace-server:latest .
 ```
 Then you can run the container and the admin interface will be listening on 0.0.0.0:8001
 ```
