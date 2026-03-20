@@ -32,6 +32,27 @@ Primary code sources:
 - `aws.accesskey`
 - `aws.secretkey`
 
+## Quick diagram (boot/static)
+
+A compact view of the boot path showing where static properties are read and the dynamic-store selection.
+
+```mermaid
+sequenceDiagram
+	participant ServerMain
+	participant BootStore as ConfigurationStore (boot props)
+	participant HttpProxyServer
+	ServerMain->>HttpProxyServer: configureAtBoot(BootStore)
+	HttpProxyServer->>HttpProxyServer: readClusterConfiguration(BootStore)
+	alt config.type == "file"
+		HttpProxyServer->>BootStore: dynamicConfigurationStore = BootStore (file mode)
+	else config.type == "database"
+		HttpProxyServer->>HerdDB: dynamicConfigurationStore = new HerdDBConfigurationStore(...)
+	end
+	HttpProxyServer->>HttpProxyServer: applyStaticConfiguration(BootStore)
+```
+
+See the full configuration architecture and detailed diagrams: `docs/configuration-architecture.md`
+
 ## Cluster/ZooKeeper (when `mode=cluster`)
 
 - `peer.id`

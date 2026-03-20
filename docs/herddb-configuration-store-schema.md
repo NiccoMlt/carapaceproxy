@@ -89,3 +89,20 @@ Primary key:
 
 - On store startup/reload, the implementation attempts `CREATE TABLE ...` for all tables.
 - If a table already exists, the resulting SQL exception is caught and ignored (debug-logged).
+
+## Quick visual: HerdDB responsibilities
+
+```mermaid
+classDiagram
+    class HerdDBConfigurationStore {
+      +proxy_config (key/value)
+      +keypairs (domain -> keys)
+      +digital_certificates (domain -> cert state)
+      +acme_challenge_tokens (id -> data)
+      +commitConfiguration(...)
+      +load/save certificate/keypair/token
+    }
+```
+
+For the full configuration architecture and sequence diagrams see `docs/configuration-architecture.md`.
+

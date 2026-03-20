@@ -191,3 +191,24 @@ Runtime reload reconfigures the active realm instance. For the built-in file rea
 
 - `listener.<n>.enabled` appears in samples/tests but is not parsed by the listener configuration builder.
 - `listener.<n>.ocsp` appears in sample config but is not parsed; OCSP control is global via `ocsp.enabled` and `ocspstaplingmanager.period`.
+
+## Quick diagram (dynamic apply)
+
+This sequence shows the main steps when a dynamic configuration payload is applied (API or boot reload): validation, subsystem reload and commit to the dynamic store, followed by cluster propagation.
+
+```mermaid
+sequenceDiagram
+	participant AdminAPI
+	participant HttpProxyServer
+	participant NewStore as ConfigurationStore(new)
+	participant DynStore as ConfigurationStore(dynamic)
+
+	AdminAPI->>HttpProxyServer: applyDynamicConfigurationFromAPI(NewStore)
+	HttpProxyServer->>HttpProxyServer: buildValidConfiguration(NewStore) // RuntimeServerConfiguration.configure(...)
+	HttpProxyServer->>HttpProxyServer: reload subsystems (listeners, proxy, truststore, certs)
+	HttpProxyServer->>DynStore: commitConfiguration(NewStore)
+	HttpProxyServer->>Group: fireEvent("configurationChange")
+```
+
+See the full configuration architecture and detailed diagrams: `docs/configuration-architecture.md`
+
