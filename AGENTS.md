@@ -1,145 +1,182 @@
 # AGENTS.md
 
-Operational guide for coding agents in `carapaceproxy`.
+Agent guide for `carapaceproxy`, focused on **server configuration**.
 
-## Project layout
-- Maven multi-module repository.
-- Modules:
-  - `carapace-server` (Java 21, JAR, proxy runtime).
-  - `carapace-ui` (WAR; Vue 2 app in `src/main/webapp`).
-- Root `pom.xml` builds both modules.
-- Use Maven wrapper (`./mvnw`) by default.
+## Scope and structure
+- Root project is Maven multi-module (`pom.xml`).
+- Backend module: `carapace-server` (Java 21, JAR).
+- UI module: `carapace-ui` (Vue 2 WAR), not the primary source of server config semantics.
+- Prefer Maven wrapper `./mvnw`.
 
-## Toolchain
-- JDK: 21 (Temurin toolchain configured in Maven).
-- Maven wrapper: 3.9.11 (`.mvn/wrapper/maven-wrapper.properties`).
-- UI production profile uses Node `v20.11.1` and Yarn `v1.22.22`.
+## Configuration files that matter most
+- Static boot config template:
+  - `carapace-server/src/main/resources/conf/server.properties`
+- Cluster boot config template:
+  - `carapace-server/src/main/resources/conf/cluster.properties`
+- Dynamic runtime config template:
+  - `carapace-server/src/main/resources/conf/server.dynamic.properties`
+- User realm file example:
+  - `carapace-server/src/main/resources/conf/user.properties`
+- Main server bootstrap entrypoint:
+  - `carapace-server/src/main/java/org/carapaceproxy/launcher/ServerMain.java`
+- Main server config application flow:
+  - `carapace-server/src/main/java/org/carapaceproxy/core/HttpProxyServer.java`
+  - `carapace-server/src/main/java/org/carapaceproxy/core/RuntimeServerConfiguration.java`
+  - `carapace-server/src/main/java/org/carapaceproxy/server/mapper/StandardEndpointMapper.java`
+
+## Server configuration model (important)
+Carapace server config is split into two logical layers:
+
+- **Static/boot configuration** (requires restart):
+  - Read by `ServerMain` from `conf/server.properties` by default (or custom path argument).
+  - Applied by `HttpProxyServer.configureAtBoot(...)` via `applyStaticConfiguration(...)`.
+  - Controls mode, admin interface, user realm class, AWS creds, clustering, etc.
+
+- **Dynamic configuration** (reloadable):
+  - Source depends on `config.type`:
+    - `file` -> same properties source
+    - `database` -> `HerdDBConfigurationStore`
+  - Applied by `applyDynamicConfiguration(...)` after validation.
+  - Contains listeners, certificates, filters, backends, directors, routes, cache/logging, and many runtime knobs.
+
+## Key boot/static properties
+- `mode=standalone|cluster`
+- `config.type=file|database`
+- Admin interface:
+  - `http.admin.enabled`
+  - `http.admin.host`
+  - `http.admin.port`
+  - `https.admin.port`
+  - `https.admin.sslcertfile`
+  - `https.admin.sslcertfilepassword`
+  - `admin.advertised.host`
+  - `admin.accesslog.*`
+- User realm:
+  - `userrealm.class`
+  - `userrealm.path` (when using file realm implementation)
+- Cluster and ZK (when `mode=cluster`):
+  - `peer.id`
+  - `zkAddress`
+  - `zkSecure`
+  - `zkTimeout`
+  - `zookeeper.*` (forwarded as additional ZK client properties)
+
+## Key dynamic properties families
+- Listener definitions: `listener.<n>.*`
+- Certificate definitions: `certificate.<n>.*`
+- Filter definitions: `filter.<n>.*`
+- Backend definitions: `backend.<n>.*`
+- Director definitions: `director.<n>.*`
+- Route definitions: `route.<n>.*`
+- Defaults/mapper behavior:
+  - `default.action.*`
+  - `mapper.*`
+- Runtime subsystems:
+  - `connectionsmanager.*`
+  - `cache.*`
+  - `healthmanager.*`
+  - `dynamiccertificatesmanager.*`
+  - `ocspstaplingmanager.*`
+  - `accesslog.*`
+  - `truststore.*`
+  - `carapace.*`
+
+## Practical startup and runtime behavior
+- Service script starts `org.carapaceproxy.launcher.ServerMain`.
+- Boot flow:
+  1) read static properties
+  2) read cluster mode details
+  3) choose dynamic store (`file`/`database`)
+  4) apply static config
+  5) initialize group membership
+  6) validate and apply dynamic config
+- In cluster mode, config changes are propagated through group membership events.
+- Dynamic maintenance toggle writes `carapace.maintenancemode.enabled` and reapplies dynamic config.
 
 ## Build commands
-Run from repo root unless specified.
+Run from repository root.
 
-- Build all modules (skip tests):
+- Build all modules, skip tests:
   - `./mvnw -B package -DskipTests`
 - Build all modules with tests:
   - `./mvnw -B test`
-- Install all modules locally:
+- Install all modules:
   - `./mvnw -B install`
-- Production bundle (UI build + server zip):
+- Production package (includes UI asset build):
   - `./mvnw clean install -DskipTests -Pproduction`
-- Build only backend:
+- Backend module only:
   - `./mvnw -pl carapace-server -am package`
-- Build only UI WAR:
-  - `./mvnw -pl carapace-ui -am package`
 
-## Test commands (especially single-test)
-Java tests are JUnit 4 through Surefire.
+## Test commands (including single test)
+Java tests are JUnit 4 via Surefire.
 
 - All tests:
   - `./mvnw test`
-- Backend module tests only:
+- Backend tests only:
   - `./mvnw -pl carapace-server test`
-- Single class:
+- Single test class:
   - `./mvnw -pl carapace-server -Dtest=ForwardedStrategyTest test`
-- Single method:
+- Single test method:
   - `./mvnw -pl carapace-server -Dtest=ForwardedStrategyTest#testRewriteStrategy test`
-- Pattern:
-  - `./mvnw -pl carapace-server -Dtest='*Cache*Test' test`
+- Pattern selection:
+  - `./mvnw -pl carapace-server -Dtest='*Configuration*Test' test`
 
 Notes:
-- Prefer `-pl carapace-server` for faster feedback.
-- Surefire JVM args include required `--add-opens`; use Maven tests, not ad-hoc runners.
+- Prefer module-scoped tests while iterating on config code.
+- Do not bypass Maven test runner; Surefire adds required JVM opens.
 
 ## Lint and static analysis
-
-### Java
-- SpotBugs is configured via Maven plugin.
-- Run SpotBugs check:
+- SpotBugs (backend):
   - `./mvnw -pl carapace-server spotbugs:check`
-- Maven Enforcer runs in normal builds; do not bypass dependency/plugin constraints.
+- Maven Enforcer runs in normal build lifecycle; keep it enabled.
+- UI lint (only when UI is touched):
+  - from `carapace-ui/src/main/webapp`: `yarn lint`
 
-### UI (Vue)
-Run from `carapace-ui/src/main/webapp`:
+## Code style guidelines (server-focused)
 
-- Install deps: `yarn install`
-- Lint: `yarn lint`
-- Build: `yarn build`
-- Dev server: `yarn serve`
-
-Focused lint example:
-- `npx eslint src/components/Configuration.vue`
-
-Note:
-- `package.json` has no frontend test script; treat lint + build as UI validation baseline.
-
-## Developer helper scripts
-- Start full local stack: `./run.sh`
-- Redeploy UI quickly: `./carapace-ui/deploy.sh`
-
-## CI parity (useful defaults)
-- PR validation uses JDK 21 and Maven wrapper.
-- CI sequence is effectively package (skip tests) then `test`.
-- Test reports come from `carapace-*/target/surefire-reports/*.xml`.
-
-## Code style guidelines
-Follow nearby code; avoid unrelated reformatting.
-
-### Java (`carapace-server`)
-- Keep Apache 2.0 license header on Java source files.
+### Java style
+- Keep Apache 2.0 license header in Java files.
 - Naming:
-  - packages lower-case (`org.carapaceproxy...`)
+  - package names lower-case
   - classes/interfaces PascalCase
   - methods/fields camelCase
-  - constants `static final` + UPPER_SNAKE_CASE
+  - constants UPPER_SNAKE_CASE
 - Imports:
   - no wildcard imports
-  - static imports first, then regular imports
-  - keep import order consistent with surrounding files
+  - static imports first, then non-static imports
+  - preserve existing grouping/order in touched file
 - Formatting:
-  - 4-space indentation, no tabs
-  - preserve existing wrapping/brace style
-  - do not mass-format untouched code
-- Types and APIs:
-  - prefer existing domain types/exceptions (e.g., `ConfigurationNotValidException`)
-  - use checked exceptions when the existing API contract uses them
-  - avoid introducing new frameworks/libraries without clear need
-- Error handling:
-  - fail fast on invalid configuration/state
-  - wrap low-level exceptions with contextual messages at boundaries
-  - never swallow exceptions silently
-- Logging:
-  - use SLF4J (`Logger`/`LoggerFactory`)
-  - avoid `System.out`/`System.err` in production code
+  - 4-space indentation
+  - preserve current brace/wrapping style
+  - avoid mass reformatting unrelated code
 
-### Java tests
-- JUnit 4 patterns (`@Test`, `@Rule`, `@Before`, `@RunWith`).
-- Test classes end with `Test`.
-- Prefer deterministic tests and explicit assertions.
-- Reuse shared test utilities in `org.carapaceproxy.utils`.
+### Types and configuration APIs
+- Use existing configuration abstractions (`ConfigurationStore`, runtime config classes).
+- Preserve checked exception contracts (e.g., `ConfigurationNotValidException`).
+- Prefer extending existing property families over introducing ad-hoc keys.
+- Validate new/changed property values close to parsing time.
 
-### Vue/JavaScript (`carapace-ui/src/main/webapp`)
-- Vue 2 Options API style; keep SFC structure: template/script/style.
-- Keep component names PascalCase in `name` field.
-- Reuse API helpers from `src/serverapi.js`.
-- Keep side effects in lifecycle hooks/methods, not computed properties.
-- Respect current ESLint setup (`eslint:recommended`, `plugin:vue/essential`).
-- Preserve per-file quote/semicolon style; do not normalize whole files unless needed.
+### Error handling and logging
+- Fail fast for invalid configuration values.
+- Include property key and invalid value in error messages when possible.
+- Do not swallow exceptions silently.
+- Use SLF4J (`Logger`/`LoggerFactory`), not stdout/stderr for server logic.
 
-## Imports, dependencies, and formatting guardrails
-- Prefer existing utilities over adding dependencies.
-- Do not change dependency versions opportunistically.
-- Keep Maven dependency exclusions/convergence choices intact.
-- Keep edits minimal and scoped to the task.
+### Config-change safety rules for agents
+- Distinguish static vs dynamic keys before implementing changes.
+- If a key is static, do not claim hot-reload behavior.
+- Keep backward compatibility for existing property names/defaults.
+- When adding keys, update sample config templates in `src/main/resources/conf/`.
+- For cluster-sensitive changes, verify both standalone and cluster paths.
 
-## Suggested agent workflow
-- Identify impacted module first (`carapace-server` vs `carapace-ui`).
-- Run narrow checks first (single test class/method or file lint).
-- After backend changes, run at least nearest backend tests.
-- After UI changes, run `yarn lint`; run `yarn build` for non-trivial changes.
-- Before handoff, verify commands are run from the correct directory.
+## Minimal validation workflow for config-related changes
+- Run one targeted test class first.
+- Run broader backend tests if config parsing/reload behavior changed.
+- Optionally smoke-run local startup using packaged service scripts.
 
 ## Cursor and Copilot rules
 - `.cursor/rules/`: not present.
 - `.cursorrules`: not present.
 - `.github/copilot-instructions.md`: not present.
 
-If these files are added later, update this AGENTS.md section to mirror them.
+If those files are added, update this document and align agent behavior.
