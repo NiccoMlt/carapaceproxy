@@ -7,7 +7,7 @@ Agent guide for `carapaceproxy`, focused on **server configuration**.
 - Backend module: `carapace-server` (Java 21, JAR).
 - UI module: `carapace-ui` (Vue 2 WAR), not the primary source of server config semantics.
 - Prefer Maven wrapper `./mvnw`.
-- Reference docs in `docs/`: `dynamic-configuration-reference.md`, `static-configuration-reference.md`, `jvm-system-properties-reference.md`, `secrets-keystores-certificates-storage.md`, `herddb-configuration-store-schema.md`, `zookeeper-stored-data-reference.md`.
+- Reference docs in `ai-generated-docs/`: `dynamic-configuration-reference.md`, `static-configuration-reference.md`, `jvm-system-properties-reference.md`, `secrets-keystores-certificates-storage.md`, `herddb-configuration-store-schema.md`, `zookeeper-stored-data-reference.md`.
 - Lombok (`@Data`, `@Builder`, `@Getter`/`@Setter`) is used across config and model classes. Java records are used for `NetworkListenerConfiguration`, `BackendConfiguration`, and `EndpointKey` — do not add conventional constructors or setters to these.
 
 ## Configuration files that matter most
