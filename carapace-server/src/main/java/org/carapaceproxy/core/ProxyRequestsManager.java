@@ -214,17 +214,12 @@ public class ProxyRequestsManager implements AutoCloseable {
         request.setLastActivity(request.getStartTs());
         request.getRequestHeaders().set(HttpHeaderNames.SERVER, ServerHeaderRequestFilter.DEFAULT_SERVER);
 
-        parent.getFilters().forEach(filter -> filter.apply(request));
-
-        // HTTP/1.x request-smuggling validation runs before the user-supplied mapper so it cannot be bypassed.
+        // HTTP/1.x request-smuggling validation runs on the raw inbound headers, before any request filter
+        // or the mapper, so a filter that mutates Content-Length / Transfer-Encoding cannot bypass it.
         // HTTP/2 framing is not vulnerable.
-        final MapResult action;
-        if (request.getHttpProtocol().majorVersion() < 2 && rejectAsSmuggling(request)) {
-            action = MapResult.badRequest();
-        } else {
-            action = parent.getMapper().map(request);
-        }
-
+        final boolean smuggling = request.getHttpProtocol().majorVersion() < 2 && rejectAsSmuggling(request);
+        parent.getFilters().forEach(filter -> filter.apply(request));
+        final MapResult action = smuggling ? MapResult.badRequest() : parent.getMapper().map(request);
         request.setAction(action);
 
         if (LOGGER.isTraceEnabled()) {
