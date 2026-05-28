@@ -142,6 +142,24 @@ public class ProxyRequestsManager implements AutoCloseable {
         });
     }
 
+    private static boolean rejectAsSmuggling(ProxyRequest request) {
+        if (request.isConnectionTaintedAfterCl0()) {
+            LOGGER.warn("Rejecting pipelined request after a Content-Length: 0 request on the same connection: {}", request.getUri());
+            return true;
+        }
+        final HttpHeaders headers = request.getRequestHeaders();
+        final String contentLength = headers.get(HttpHeaderNames.CONTENT_LENGTH);
+        final String transferEncoding = headers.get(HttpHeaderNames.TRANSFER_ENCODING);
+        if (contentLength != null && transferEncoding != null) {
+            LOGGER.warn("Potential CL.TE request smuggling attack: both Content-Length and Transfer-Encoding present. Request: {}", request.getUri());
+            return true;
+        }
+        if (contentLength != null && contentLength.trim().equals("0")) {
+            request.markConnectionForClose();
+        }
+        return false;
+    }
+
     private static void cleanRequestFromCacheValidators(ProxyRequest request) {
         HttpHeaders headers = request.getRequestHeaders();
         headers.remove(HttpHeaderNames.IF_MATCH);
@@ -207,7 +225,14 @@ public class ProxyRequestsManager implements AutoCloseable {
 
         parent.getFilters().forEach(filter -> filter.apply(request));
 
-        MapResult action = parent.getMapper().map(request);
+        // HTTP/1.x request-smuggling validation runs before the user-supplied mapper so it cannot be bypassed.
+        // HTTP/2 framing is not vulnerable. See diennea/carapaceproxy#533 (interim) and #532 (HTTP/2 to backend).
+        final MapResult action;
+        if (request.getHttpProtocol().majorVersion() < 2 && rejectAsSmuggling(request)) {
+            action = MapResult.badRequest();
+        } else {
+            action = parent.getMapper().map(request);
+        }
 
         request.setAction(action);
 
