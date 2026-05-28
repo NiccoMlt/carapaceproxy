@@ -294,6 +294,8 @@ public class Listeners {
             } catch (InterruptedException ex) {
                 LOG.error("Interrupted while stopping a listener", ex);
                 Thread.currentThread().interrupt();
+            } catch (RuntimeException ex) {
+                LOG.error("Failed to stop listener {}", key, ex);
             }
         }
     }
