@@ -165,8 +165,11 @@ public class ProxyRequestsManager implements AutoCloseable {
                 if (!StringUtils.isBlank(path)) {
                     if (newContexts.containsKey(path)) {
                         LOGGER.debug("SSL context for backend {} was already prepared from {}", backend.id(), path);
-                    } else if (clientSslContexts.containsKey(path)) {
-                        newContexts.put(path, clientSslContexts.get(path));
+                        continue;
+                    }
+                    final SslContext cached = clientSslContexts.get(path);
+                    if (cached != null) {
+                        newContexts.put(path, cached);
                         LOGGER.debug("SSL context for backend {} was already loaded from {}", backend.id(), path);
                     } else {
                         final SslContext sslContext = parent.getTrustStoreManager()
