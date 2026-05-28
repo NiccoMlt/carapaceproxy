@@ -30,7 +30,6 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.AsciiString;
-import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
@@ -284,21 +283,6 @@ public class ProxyRequest implements MatchingContext {
 
     public void setResponseStatus(HttpResponseStatus status) {
         response.status(status);
-    }
-
-    private static final AttributeKey<Boolean> CL0_TAINT = AttributeKey.valueOf("carapace.cl0Taint");
-
-    public void markConnectionForClose() {
-        request.withConnection(conn -> {
-            conn.channel().attr(CL0_TAINT).set(Boolean.TRUE);
-            conn.markPersistent(false);
-        });
-    }
-
-    public boolean isConnectionTaintedAfterCl0() {
-        final AtomicReference<Boolean> tainted = new AtomicReference<>();
-        request.withConnection(conn -> tainted.set(conn.channel().attr(CL0_TAINT).get()));
-        return Boolean.TRUE.equals(tainted.get());
     }
 
     public boolean isKeepAlive() {
