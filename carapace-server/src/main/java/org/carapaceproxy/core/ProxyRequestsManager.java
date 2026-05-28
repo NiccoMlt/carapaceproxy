@@ -163,7 +163,9 @@ public class ProxyRequestsManager implements AutoCloseable {
             for (final BackendConfiguration backend : newEndpoints) {
                 final String path = backend.caCertificatePath();
                 if (!StringUtils.isBlank(path)) {
-                    if (clientSslContexts.containsKey(path)) {
+                    if (newContexts.containsKey(path)) {
+                        LOGGER.debug("SSL context for backend {} was already prepared from {}", backend.id(), path);
+                    } else if (clientSslContexts.containsKey(path)) {
                         newContexts.put(path, clientSslContexts.get(path));
                         LOGGER.debug("SSL context for backend {} was already loaded from {}", backend.id(), path);
                     } else {
