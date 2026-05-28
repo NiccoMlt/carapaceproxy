@@ -83,6 +83,17 @@ public class BackendHealthStatus {
         return state.get().status();
     }
 
+    /**
+     * Returns a coherent snapshot of the four state-machine fields ({@code status}, {@code unreachableSince},
+     * {@code lastUnreachable}, {@code lastReachable}). Use this instead of calling several field-level getters
+     * in a row when more than one field is needed — each individual getter is itself atomic, but two
+     * consecutive getter calls can straddle a state transition and observe an inconsistent pair.
+     */
+    public Snapshot snapshot() {
+        final State s = state.get();
+        return new Snapshot(s.status(), s.unreachableSince(), s.lastUnreachable(), s.lastReachable());
+    }
+
     public void reportAsUnreachable(final long timestamp, final String cause) {
         LOG.info("{}: reportAsUnreachable {}, cause {}", hostPort, new Timestamp(timestamp), cause);
         state.updateAndGet(s -> s.withUnreachable(timestamp));
@@ -152,7 +163,14 @@ public class BackendHealthStatus {
     }
 
     /**
-     * Immutable snapshot of the four state-machine fields that transition together.
+     * Coherent read-only view of {@link #getStatus()}, {@link #getUnreachableSince()},
+     * {@link #getLastUnreachable()}, and {@link #getLastReachable()} captured atomically via {@link #snapshot()}.
+     */
+    public record Snapshot(Status status, long unreachableSince, long lastUnreachable, long lastReachable) {
+    }
+
+    /**
+     * Immutable internal record of the four state-machine fields that transition together.
      * Held in an {@link AtomicReference} so {@code reportAs(Un)Reachable} callers cannot interleave their
      * field writes; each {@link AtomicReference#updateAndGet} call is a single linearization point.
      */
