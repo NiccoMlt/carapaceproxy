@@ -674,11 +674,19 @@ public class DynamicCertificatesManager implements Runnable {
      * and the admin REST path through {@link GroupMembershipHandler#executeInMutex}, which
      * is reentrant per-thread in both standalone and cluster modes.
      * <p>
+     * Falls back to a direct call when {@link #groupMembershipHandler} has not been attached
+     * yet (test runs, local-only setups), matching the null-guard pattern used elsewhere in
+     * this class (e.g. {@link #run()} and {@link #setStateOfCertificate}).
+     * <p>
      * Callers already running inside the mutex (e.g. {@link #certificatesLifecycle()})
      * should invoke {@link #reloadCertificatesFromDBInternal()} directly instead.
      */
     private void reloadCertificatesFromDB() {
-        groupMembershipHandler.executeInMutex(THREAD_NAME, period > 0 ? period : 1, this::reloadCertificatesFromDBInternal);
+        if (groupMembershipHandler != null) {
+            groupMembershipHandler.executeInMutex(THREAD_NAME, period > 0 ? period : 1, this::reloadCertificatesFromDBInternal);
+        } else {
+            reloadCertificatesFromDBInternal();
+        }
     }
 
     private void reloadCertificatesFromDBInternal() {
