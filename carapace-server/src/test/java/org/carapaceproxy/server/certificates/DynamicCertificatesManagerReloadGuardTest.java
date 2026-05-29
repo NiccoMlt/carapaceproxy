@@ -21,8 +21,8 @@ package org.carapaceproxy.server.certificates;
 
 import static org.carapaceproxy.server.certificates.DynamicCertificateState.AVAILABLE;
 import static org.carapaceproxy.server.certificates.DynamicCertificateState.REQUEST_FAILED;
-import static org.carapaceproxy.server.certificates.DynamicCertificatesManager.hasAnyBindingChange;
-import static org.junit.Assert.assertFalse;
+import static org.carapaceproxy.server.certificates.DynamicCertificatesManager.computeChangedCertIds;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import java.util.Map;
 import java.util.Set;
@@ -30,9 +30,10 @@ import org.carapaceproxy.configstore.CertificateData;
 import org.junit.Test;
 
 /**
- * Tests for the listener-reload gate added in {@link DynamicCertificatesManager#hasAnyBindingChange}.
- * Each test name describes the high-level behaviour driven by the predicate: when it returns
- * {@code false}, the reload skips {@code server.getListeners().reloadCurrentConfiguration()}.
+ * Tests for the listener-reload gate driven by {@link DynamicCertificatesManager#computeChangedCertIds}.
+ * Each test name describes the high-level behaviour: when the returned set is empty, the
+ * reload skips {@code server.getListeners().reloadCurrentConfiguration(...)}; when it
+ * is non-empty, only listeners that bind one of those ids restart.
  */
 public class DynamicCertificatesManagerReloadGuardTest {
 
@@ -44,14 +45,14 @@ public class DynamicCertificatesManagerReloadGuardTest {
         final CertificateData stable = certWithKeystore("example.com", KEYSTORE_A);
         final Map<String, CertificateData> old = Map.of("example.com", stable);
         final Map<String, CertificateData> fresh = Map.of("example.com", certWithKeystore("example.com", KEYSTORE_A.clone()));
-        assertFalse(hasAnyBindingChange(old, fresh));
+        assertTrue(computeChangedCertIds(old, fresh).isEmpty());
     }
 
     @Test
     public void testReloadTriggersListenerOnKeystoreChange() {
         final Map<String, CertificateData> old = Map.of("example.com", certWithKeystore("example.com", KEYSTORE_A));
         final Map<String, CertificateData> fresh = Map.of("example.com", certWithKeystore("example.com", KEYSTORE_B));
-        assertTrue(hasAnyBindingChange(old, fresh));
+        assertEquals(Set.of("example.com"), computeChangedCertIds(old, fresh));
     }
 
     @Test
@@ -60,7 +61,7 @@ public class DynamicCertificatesManagerReloadGuardTest {
         final Map<String, CertificateData> fresh = Map.of(
                 "example.com", certWithKeystore("example.com", KEYSTORE_A.clone()),
                 "second.example.com", certWithKeystore("second.example.com", KEYSTORE_B));
-        assertTrue(hasAnyBindingChange(old, fresh));
+        assertEquals(Set.of("second.example.com"), computeChangedCertIds(old, fresh));
     }
 
     @Test
@@ -69,7 +70,7 @@ public class DynamicCertificatesManagerReloadGuardTest {
                 "example.com", certWithKeystore("example.com", KEYSTORE_A),
                 "second.example.com", certWithKeystore("second.example.com", KEYSTORE_B));
         final Map<String, CertificateData> fresh = Map.of("example.com", certWithKeystore("example.com", KEYSTORE_A.clone()));
-        assertTrue(hasAnyBindingChange(old, fresh));
+        assertEquals(Set.of("second.example.com"), computeChangedCertIds(old, fresh));
     }
 
     @Test
@@ -88,7 +89,7 @@ public class DynamicCertificatesManagerReloadGuardTest {
 
         final Map<String, CertificateData> old = Map.of("stuck.example.com", stuckPrev);
         final Map<String, CertificateData> fresh = Map.of("stuck.example.com", stuckTicked);
-        assertFalse(hasAnyBindingChange(old, fresh));
+        assertTrue(computeChangedCertIds(old, fresh).isEmpty());
     }
 
     @Test
@@ -97,7 +98,18 @@ public class DynamicCertificatesManagerReloadGuardTest {
         final CertificateData freshCert = certWithKeystoreAndSans("example.com", KEYSTORE_A.clone(), Set.of("other.example.com"));
         final Map<String, CertificateData> old = Map.of("example.com", oldCert);
         final Map<String, CertificateData> fresh = Map.of("example.com", freshCert);
-        assertTrue(hasAnyBindingChange(old, fresh));
+        assertEquals(Set.of("example.com"), computeChangedCertIds(old, fresh));
+    }
+
+    @Test
+    public void testReloadReturnsOnlyTheChangedIdsAmongStableOnes() {
+        final Map<String, CertificateData> old = Map.of(
+                "a.example.com", certWithKeystore("a.example.com", KEYSTORE_A),
+                "b.example.com", certWithKeystore("b.example.com", KEYSTORE_A));
+        final Map<String, CertificateData> fresh = Map.of(
+                "a.example.com", certWithKeystore("a.example.com", KEYSTORE_A.clone()),
+                "b.example.com", certWithKeystore("b.example.com", KEYSTORE_B));
+        assertEquals(Set.of("b.example.com"), computeChangedCertIds(old, fresh));
     }
 
     private static CertificateData certWithKeystore(final String domain, final byte[] keystoreData) {

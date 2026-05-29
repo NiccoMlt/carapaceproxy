@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import javax.net.ssl.KeyManagerFactory;
 import org.carapaceproxy.server.config.ConfigurationNotValidException;
@@ -110,6 +111,24 @@ public class ListeningChannel {
 
     public void clear() {
         this.sslContexts.clear();
+    }
+
+    /**
+     * Tells whether this listener binds at least one of the supplied certificate ids.
+     * <p>
+     * The {@link #sslContexts} map is keyed by certificate id, so its key set is the
+     * authoritative bound-cert set for this listener. Used by
+     * {@link Listeners#reloadConfiguration(RuntimeServerConfiguration, Set)} to skip the
+     * restart of listeners whose bound certs did not change.
+     *
+     * @param changedCertIds certificate ids whose binding-relevant state has changed; may be {@code null} or empty
+     * @return {@code true} when at least one of the supplied ids appears in {@link #sslContexts}
+     */
+    public boolean bindsAnyOf(final Set<String> changedCertIds) {
+        if (changedCertIds == null || changedCertIds.isEmpty()) {
+            return false;
+        }
+        return !Collections.disjoint(this.sslContexts.keySet(), changedCertIds);
     }
 
     private SslContext bootSslContext(final NetworkListenerConfiguration listener, final SSLCertificateConfiguration certificate) throws ConfigurationNotValidException {

@@ -51,6 +51,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -702,10 +703,10 @@ public class DynamicCertificatesManager implements Runnable {
                 LOG.info("RELOADED certificate for domain {}: {}", domain, freshCert);
             }
             var oldCertificates = this.certificates;
-            final boolean anyBindingChange = hasAnyBindingChange(oldCertificates, newCertificates);
+            final Set<String> changedCertIds = computeChangedCertIds(oldCertificates, newCertificates);
             this.certificates = newCertificates; // only certificates/domains specified in the config have to be managed.
-            if (anyBindingChange) {
-                server.getListeners().reloadCurrentConfiguration();
+            if (!changedCertIds.isEmpty()) {
+                server.getListeners().reloadCurrentConfiguration(changedCertIds);
             } else {
                 LOG.debug("No certificate binding change detected; skipping listener reload");
             }
@@ -716,17 +717,25 @@ public class DynamicCertificatesManager implements Runnable {
         }
     }
 
-    static boolean hasAnyBindingChange(final Map<String, CertificateData> oldCertificates,
-                                       final Map<String, CertificateData> newCertificates) {
-        if (!oldCertificates.keySet().equals(newCertificates.keySet())) {
-            return true;
-        }
+    /**
+     * Cert ids whose binding-relevant state (keystore bytes, SANs) differs between the
+     * previous and refreshed cert maps, plus any newly-added or removed ids. An empty
+     * return means no listener restart is needed.
+     */
+    static Set<String> computeChangedCertIds(final Map<String, CertificateData> oldCertificates,
+                                             final Map<String, CertificateData> newCertificates) {
+        final Set<String> changed = new HashSet<>();
         for (final Entry<String, CertificateData> entry : newCertificates.entrySet()) {
             if (!CertificateData.bindingEquivalent(oldCertificates.get(entry.getKey()), entry.getValue())) {
-                return true;
+                changed.add(entry.getKey());
             }
         }
-        return false;
+        for (final String oldKey : oldCertificates.keySet()) {
+            if (!newCertificates.containsKey(oldKey)) {
+                changed.add(oldKey);
+            }
+        }
+        return changed;
     }
 
     private void storeLocalCertificates(Collection<CertificateData> newCertificates, Map<String, CertificateData> oldCertificates) {

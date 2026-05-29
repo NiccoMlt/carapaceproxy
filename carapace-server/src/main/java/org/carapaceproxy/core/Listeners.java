@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import jdk.net.ExtendedSocketOptions;
@@ -104,12 +105,35 @@ public class Listeners {
 
     /**
      * Apply a new configuration and refresh the listeners according to it.
+     * <p>
+     * Equivalent to {@link #reloadConfiguration(RuntimeServerConfiguration, Set)} with a
+     * {@code null} {@code changedCertIds} — broad path: every SSL listener falls into
+     * the restart bucket when the new configuration is the same reference as the current
+     * one (the historical sentinel used by the certificate manager).
      *
      * @param newConfiguration the configuration
      * @throws InterruptedException if it is interrupted while starting or stopping a listener
      * @see #reloadCurrentConfiguration()
      */
     void reloadConfiguration(final RuntimeServerConfiguration newConfiguration) throws InterruptedException, ConfigurationNotValidException {
+        reloadConfiguration(newConfiguration, null);
+    }
+
+    /**
+     * Apply a new configuration and refresh only the listeners whose bound certificates
+     * actually changed.
+     * <p>
+     * When {@code changedCertIds} is non-null, the certificate-change branch of the
+     * classification matches a listener only if at least one of its bound SNI certs
+     * appears in the supplied set (see {@link ListeningChannel#bindsAnyOf(Set)}).
+     * When {@code changedCertIds} is {@code null}, the historical reference-equality
+     * sentinel is used instead.
+     *
+     * @param newConfiguration the configuration
+     * @param changedCertIds   certificate ids whose binding-relevant state has changed; may be {@code null}
+     * @throws InterruptedException if it is interrupted while starting or stopping a listener
+     */
+    void reloadConfiguration(final RuntimeServerConfiguration newConfiguration, final Set<String> changedCertIds) throws InterruptedException, ConfigurationNotValidException {
         if (!started) {
             this.currentConfiguration = newConfiguration;
             return;
@@ -125,7 +149,11 @@ public class Listeners {
             final EndpointKey hostPort = channel.getKey();
             final NetworkListenerConfiguration actualListenerConfig = currentConfiguration.getListener(hostPort);
             final NetworkListenerConfiguration newConfigurationForListener = newConfiguration.getListener(hostPort);
-            final boolean isReloadCertificate = newConfiguration == currentConfiguration && newConfigurationForListener.ssl();
+            final boolean isReloadCertificate = newConfigurationForListener != null
+                    && newConfigurationForListener.ssl()
+                    && (changedCertIds != null
+                            ? channel.getValue().bindsAnyOf(changedCertIds)
+                            : newConfiguration == currentConfiguration);
             if (newConfigurationForListener == null) {
                 LOG.info("listener: {} is to be shut down", hostPort);
                 listenersToStop.add(hostPort);
@@ -302,11 +330,25 @@ public class Listeners {
 
     /**
      * Re-apply the current configuration; it should be invoked after editing it.
+     * <p>
+     * Broad path: every SSL listener is restarted. For the narrow path used by the
+     * dynamic certificate manager, see {@link #reloadCurrentConfiguration(Set)}.
      *
      * @throws InterruptedException if it is interrupted while starting or stopping a listener
      */
     public void reloadCurrentConfiguration() throws InterruptedException, ConfigurationNotValidException {
         reloadConfiguration(this.currentConfiguration);
+    }
+
+    /**
+     * Re-apply the current configuration, restarting only the SSL listeners whose bound
+     * certs appear in {@code changedCertIds}.
+     *
+     * @param changedCertIds certificate ids whose binding-relevant state has changed
+     * @throws InterruptedException if it is interrupted while starting or stopping a listener
+     */
+    public void reloadCurrentConfiguration(final Set<String> changedCertIds) throws InterruptedException, ConfigurationNotValidException {
+        reloadConfiguration(this.currentConfiguration, changedCertIds);
     }
 
 }
