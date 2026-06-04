@@ -682,12 +682,42 @@ public class DynamicCertificatesManager implements Runnable {
             }
             var oldCertificates = this.certificates;
             this.certificates = newCertificates; // only certificates/domains specified in the config have to be managed.
-            server.getListeners().reloadCurrentConfiguration();
+            // Only restart listeners when a certificate's keystore bytes actually changed. A perpetually
+            // failing ACME cert flips transient state (attemptsCount/message) every cycle but its TLS
+            // material is unchanged; restarting the SSL listeners on every such tick flaps the bound ports
+            // for nothing.
+            if (keystoreDataChanged(oldCertificates, newCertificates)) {
+                server.getListeners().reloadCurrentConfiguration();
+            } else {
+                LOG.debug("Certificates reloaded from db with no keystore change; skipping listener reload");
+            }
             // storing certificates on local path
             storeLocalCertificates(newCertificates.values(), oldCertificates);
         } catch (GeneralSecurityException | MalformedURLException | InterruptedException | ConfigurationNotValidException e) {
             throw new DynamicCertificatesManagerException("Unable to load dynamic certificates from db.", e);
         }
+    }
+
+    /**
+     * Tell whether the keystore bytes a listener would serve changed between two certificate snapshots.
+     * The two maps share the same key set here (the new snapshot is built by walking the old one), so a
+     * missing previous entry is treated as a change to cover first issuance. Package-private to be unit
+     * testable.
+     *
+     * @param oldCerts the previous certificate snapshot
+     * @param newCerts the freshly reloaded certificate snapshot
+     * @return {@code true} if any domain's keystore bytes differ
+     */
+    static boolean keystoreDataChanged(Map<String, CertificateData> oldCerts, Map<String, CertificateData> newCerts) {
+        for (Entry<String, CertificateData> entry : newCerts.entrySet()) {
+            CertificateData prev = oldCerts.get(entry.getKey());
+            byte[] prevKeystore = prev == null ? null : prev.getKeystoreData();
+            byte[] newKeystore = entry.getValue() == null ? null : entry.getValue().getKeystoreData();
+            if (!Arrays.equals(prevKeystore, newKeystore)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void storeLocalCertificates(Collection<CertificateData> newCertificates, Map<String, CertificateData> oldCertificates) {
