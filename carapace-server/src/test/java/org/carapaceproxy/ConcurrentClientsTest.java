@@ -63,8 +63,8 @@ public class ConcurrentClientsTest {
                         .withHeader("Content-Type", "text/html")
                         .withBody("it <b>works</b> !!")));
 
-        final TestEndpointMapper mapper = new TestEndpointMapper("localhost", wireMockRule.port());
-        try (HttpProxyServer server = HttpProxyServer.buildForTests("localhost", 0, mapper, tmpDir.newFolder())) {
+        final TestEndpointMapper mapper = new TestEndpointMapper("127.0.0.1", wireMockRule.port());
+        try (HttpProxyServer server = HttpProxyServer.buildForTests("127.0.0.1", 0, mapper, tmpDir.newFolder())) {
             server.start();
             final int numRequests = 200;
             final int concurrency = concurrent ? 4 : 1;
@@ -76,7 +76,7 @@ public class ConcurrentClientsTest {
             final HttpClient client = HttpClient.create(provider);
             final Function<Integer, Mono<String>> executeRequest = i -> client
                     .get()
-                    .uri("http://localhost:" + server.getLocalPort() + "/index.html")
+                    .uri("http://127.0.0.1:" + server.getLocalPort() + "/index.html")
                     .responseContent()
                     .aggregate()
                     .asString()
