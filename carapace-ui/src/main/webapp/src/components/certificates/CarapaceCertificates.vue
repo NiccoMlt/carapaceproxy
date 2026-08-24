@@ -90,7 +90,7 @@ import StatusBox from '../StatusBox.vue';
  */
 
 export default {
-    name: "Certificates",
+    name: "CarapaceCertificates",
 
     components: {
         CertificateForm,

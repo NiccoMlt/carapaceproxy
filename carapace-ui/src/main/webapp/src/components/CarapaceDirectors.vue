@@ -8,7 +8,7 @@
 <script>
 import { doGet } from "../serverapi";
 export default {
-    name: "Directors",
+    name: "CarapaceDirectors",
     data() {
         return {
             directors: []

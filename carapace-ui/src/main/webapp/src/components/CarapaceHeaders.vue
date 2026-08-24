@@ -8,7 +8,7 @@
 <script>
 import { doGet } from "../serverapi";
 export default {
-    name: "headers",
+    name: "CarapaceHeaders",
     data() {
         return {
             headers: []

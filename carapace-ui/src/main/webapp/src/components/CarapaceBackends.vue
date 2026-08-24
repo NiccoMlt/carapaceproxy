@@ -33,7 +33,7 @@
     import { doGet } from "../serverapi";
     import { formatTimestamp } from "../lib/formatter";
     export default {
-        name: "Backends",
+        name: "CarapaceBackends",
         data() {
             return {
                 backends: []

@@ -15,7 +15,7 @@
 import { doGet } from "../serverapi";
 
 export default {
-    name: "Navbar",
+    name: "CarapaceNavbar",
     props: {
         logo: String,
         label: String,

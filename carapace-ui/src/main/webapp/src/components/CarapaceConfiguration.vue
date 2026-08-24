@@ -53,7 +53,7 @@
     import { doPost } from "../serverapi";
 
     export default {
-        name: "Configuration",
+        name: "CarapaceConfiguration",
         data() {
             return {
                 configuration: "",

@@ -16,7 +16,7 @@
 import { doGet } from "../serverapi";
 import { toBooleanSymbol } from "../lib/formatter";
 export default {
-    name: "Listeners",
+    name: "CarapaceListeners",
     data() {
         return {
             listeners: []

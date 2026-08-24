@@ -35,7 +35,7 @@
 
 <script>
 export default {
-    name: "Sidebar",
+    name: "CarapaceSidebar",
     props: {
         elements: Array
     },

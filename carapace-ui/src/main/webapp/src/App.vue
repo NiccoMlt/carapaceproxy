@@ -1,8 +1,8 @@
 <template>
     <div id="app">
-        <navbar logo="assets/logo-small.png" label="arapace" :nodeId="nodeId" />
+        <carapace-navbar logo="assets/logo-small.png" label="arapace" :nodeId="nodeId" />
         <div id="nav-space" class="d-flex">
-            <sidebar
+            <carapace-sidebar
                 :elements="[
                     {
                         label: 'Backends',
@@ -83,14 +83,14 @@
 
 <script>
 import { doGet } from "./serverapi";
-import Navbar from "./components/Navbar.vue";
-import Sidebar from "./components/Sidebar.vue";
+import CarapaceNavbar from "./components/CarapaceNavbar.vue";
+import CarapaceSidebar from "./components/CarapaceSidebar.vue";
 
 export default {
     name: "app",
     components: {
-        navbar: Navbar,
-        sidebar: Sidebar
+        "carapace-navbar": CarapaceNavbar,
+        "carapace-sidebar": CarapaceSidebar
     },
     data() {
         return {

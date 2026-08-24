@@ -84,7 +84,7 @@
 <script>
     import { doGet, doPost } from '../../serverapi'
     export default {
-        name: 'Certificate',
+        name: 'CarapaceCertificate',
         data() {
             return {
                 certificate: {},

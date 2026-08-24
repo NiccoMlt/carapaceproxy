@@ -8,7 +8,7 @@
 <script>
 import { doGet } from "../serverapi";
 export default {
-    name: "Actions",
+    name: "CarapaceActions",
     data() {
         return {
             actions: []

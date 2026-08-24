@@ -13,7 +13,7 @@
 <script>
 import { doGet } from "../serverapi";
 export default {
-    name: "Metrics",
+    name: "CarapaceMetrics",
     data() {
         return {
             metricsPath: ""

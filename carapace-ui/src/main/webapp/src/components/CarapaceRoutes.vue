@@ -15,7 +15,7 @@ import { doGet } from "../serverapi";
 import { toBooleanSymbol } from "../lib/formatter";
 import StatusBox from "./StatusBox.vue";
 export default {
-    name: "Routes",
+    name: "CarapaceRoutes",
     components: {
         "status-box": StatusBox
     },

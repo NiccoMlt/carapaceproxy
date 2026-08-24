@@ -21,7 +21,7 @@
 <script>
 import { doGet } from "../serverapi";
 export default {
-    name: "Peers",
+    name: "CarapacePeers",
     data() {
         return {
             peers: []

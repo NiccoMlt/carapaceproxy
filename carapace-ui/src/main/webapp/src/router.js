@@ -1,22 +1,22 @@
 import Vue from 'vue';
 import Router from 'vue-router';
 
-import Backends from './components/Backends';
+import CarapaceBackends from './components/CarapaceBackends';
 import ConnectionPools from './components/ConnectionPools';
-import Routes from './components/Routes';
-import Actions from './components/Actions';
-import Directors from './components/Directors';
+import CarapaceRoutes from './components/CarapaceRoutes';
+import CarapaceActions from './components/CarapaceActions';
+import CarapaceDirectors from './components/CarapaceDirectors';
 import Cache from './components/Cache';
-import Listeners from './components/Listeners';
+import CarapaceListeners from './components/CarapaceListeners';
 import UserRealm from './components/UserRealm';
 import RequestFilters from './components/RequestFilters';
-import Certificates from './components/certificates/Certificates';
-import Certificate from './components/certificates/Certificate';
+import CarapaceCertificates from './components/certificates/CarapaceCertificates';
+import CarapaceCertificate from './components/certificates/CarapaceCertificate';
 import DatatableList from './components/DatatableList';
-import Configuration from './components/Configuration';
-import Metrics from './components/Metrics';
-import Peers from './components/Peers';
-import Headers from './components/Headers';
+import CarapaceConfiguration from './components/CarapaceConfiguration';
+import CarapaceMetrics from './components/CarapaceMetrics';
+import CarapacePeers from './components/CarapacePeers';
+import CarapaceHeaders from './components/CarapaceHeaders';
 
 Vue.component('datatable-list', DatatableList);
 
@@ -27,7 +27,7 @@ export default new Router({
         {
             path: '/',
             name: 'Root',
-            component: Backends
+            component: CarapaceBackends
         },
         {
             path: '/connectionpools',
@@ -37,17 +37,17 @@ export default new Router({
         {
             path: '/routes',
             name: 'Routes',
-            component: Routes
+            component: CarapaceRoutes
         },
         {
             path: '/actions',
             name: 'Actions',
-            component: Actions
+            component: CarapaceActions
         },
         {
             path: '/directors',
             name: 'Directors',
-            component: Directors
+            component: CarapaceDirectors
         },
         {
             path: '/cache',
@@ -57,7 +57,7 @@ export default new Router({
         {
             path: '/listeners',
             name: 'Listeners',
-            component: Listeners
+            component: CarapaceListeners
         },
         {
             path: '/requestfilters',
@@ -72,32 +72,32 @@ export default new Router({
         {
             path: '/certificates',
             name: 'Certificates',
-            component: Certificates
+            component: CarapaceCertificates
         },
         {
             path: '/certificates/:id',
             name: 'Certificate',
-            component: Certificate
+            component: CarapaceCertificate
         },
         {
             path: '/configuration',
             name: 'Configuration',
-            component: Configuration
+            component: CarapaceConfiguration
         },
         {
             path: '/metrics',
             name: 'Metrics',
-            component: Metrics
+            component: CarapaceMetrics
         },
         {
             path: '/peers',
             name: 'Peers',
-            component: Peers
+            component: CarapacePeers
         },
         {
             path: '/headers',
             name: 'Headers',
-            component: Headers
+            component: CarapaceHeaders
         }
     ]
 })
