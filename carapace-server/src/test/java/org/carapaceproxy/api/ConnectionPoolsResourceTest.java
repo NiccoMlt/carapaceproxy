@@ -41,7 +41,7 @@ public class ConnectionPoolsResourceTest extends UseAdminServer {
     @Rule
     public WireMockRule wireMockRule = new WireMockRule(0);
 
-    private void configureAndStartServer() throws Exception {
+    private Properties configureAndStartServer() throws Exception {
 
         HttpTestUtils.overrideJvmWideHttpsVerifier();
 
@@ -97,13 +97,40 @@ public class ConnectionPoolsResourceTest extends UseAdminServer {
         // Default connection pool properties
         config.put("connectionsmanager.maxconnectionsperendpoint", MAX_CONNECTIONS_PER_ENDPOINT);
 
-        // Custom connection pool (with defaults)
-        config.put("connectionpool.1.id", DEFAULT_EXAMPLE_ORG);
-        config.put("connectionpool.1.domain", DEFAULT_EXAMPLE_ORG);
-        config.put("connectionpool.1.maxconnectionsperendpoint", String.valueOf(MAX_CONNECTIONS_PER_ENDPOINT * 2));
-        config.put("connectionpool.1.enabled", "true");
-
         changeDynamicConfiguration(config);
+
+        // connection pools are state: they are created through the API, not through the configuration
+        // every value but maxConnectionsPerEndpoint is left out, and is therefore inherited
+        final var pool = new ConnectionPoolsResource.ConnectionPoolBean();
+        pool.setId(DEFAULT_EXAMPLE_ORG);
+        pool.setDomain(DEFAULT_EXAMPLE_ORG);
+        pool.setMaxConnectionsPerEndpoint(MAX_CONNECTIONS_PER_ENDPOINT * 2);
+        pool.setEnabled(true);
+        try (final var client = new RawHttpClient("localhost", 8761)) {
+            final var response = client.post(CONNECTION_POOLS_PATH, null, pool, credentials);
+            assertThat(response.getStatusLine(), containsString(CREATED));
+        }
+        return config;
+    }
+
+    @Test
+    public void testInheritedValuesFollowTheGlobalConfiguration() throws Exception {
+        final var config = configureAndStartServer();
+
+        // the pool was created without an idle timeout of its own, so it takes the global one
+        final var initial = server.getCurrentConfiguration();
+        assertThat(initial.getConnectionPools().get(DEFAULT_EXAMPLE_ORG).getIdleTimeout(), is(initial.getIdleTimeout()));
+
+        config.setProperty("connectionsmanager.idletimeout", String.valueOf(IDLE_TIMEOUT));
+        changeDynamicConfiguration(config);
+
+        final var updated = server.getCurrentConfiguration();
+        assertThat(updated.getIdleTimeout(), is(IDLE_TIMEOUT));
+        assertThat(updated.getConnectionPools().get(DEFAULT_EXAMPLE_ORG).getIdleTimeout(), is(IDLE_TIMEOUT));
+
+        // the value the pool did pin is left alone
+        assertThat(updated.getConnectionPools().get(DEFAULT_EXAMPLE_ORG).getMaxConnectionsPerEndpoint(),
+                is(MAX_CONNECTIONS_PER_ENDPOINT * 2));
     }
 
     @Test

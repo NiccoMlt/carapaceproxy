@@ -41,7 +41,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.Types;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -55,6 +58,7 @@ import java.util.stream.Collectors;
 import org.apache.bookkeeper.stats.StatsLogger;
 import org.carapaceproxy.server.certificates.DynamicCertificateState;
 import org.carapaceproxy.server.config.AcmeProviderConfiguration;
+import org.carapaceproxy.server.config.ConnectionPoolEntry;
 import org.carapaceproxy.utils.StringUtils;
 import org.shredzone.acme4j.toolbox.JSON;
 import org.slf4j.Logger;
@@ -154,6 +158,48 @@ public class HerdDBConfigurationStore implements ConfigurationStore {
             DELETE from %s WHERE id=?
             """.formatted(ACME_CHALLENGE_TOKENS_TABLE_NAME);
 
+    // Table for connection pools; a NULL value means that the pool inherits the global connectionsmanager.* one
+    private static final String CONNECTION_POOLS_TABLE_NAME = "connection_pools";
+    private static final String CONNECTION_POOLS_VALUE_COLUMNS = """
+            domain, enabled, keepalive, maxconnectionsperendpoint, borrowtimeout, connecttimeout, \
+            stuckrequesttimeout, idletimeout, maxlifetime, disposetimeout, keepaliveidle, keepaliveinterval, \
+            keepalivecount""";
+    private static final String CREATE_CONNECTION_POOLS_TABLE = """
+            CREATE TABLE %s (
+                id string primary key,
+                domain string not null,
+                enabled boolean not null,
+                keepalive boolean not null,
+                maxconnectionsperendpoint int,
+                borrowtimeout int,
+                connecttimeout int,
+                stuckrequesttimeout int,
+                idletimeout int,
+                maxlifetime int,
+                disposetimeout int,
+                keepaliveidle int,
+                keepaliveinterval int,
+                keepalivecount int
+            )""".formatted(CONNECTION_POOLS_TABLE_NAME);
+    private static final String SELECT_ALL_FROM_CONNECTION_POOLS_TABLE = """
+            SELECT id, %s
+            FROM %s
+            """.formatted(CONNECTION_POOLS_VALUE_COLUMNS, CONNECTION_POOLS_TABLE_NAME);
+    private static final String UPDATE_CONNECTION_POOLS_TABLE = """
+            UPDATE %s
+            SET domain=?, enabled=?, keepalive=?, maxconnectionsperendpoint=?, borrowtimeout=?, connecttimeout=?, \
+            stuckrequesttimeout=?, idletimeout=?, maxlifetime=?, disposetimeout=?, keepaliveidle=?, \
+            keepaliveinterval=?, keepalivecount=?
+            WHERE id=?
+            """.formatted(CONNECTION_POOLS_TABLE_NAME);
+    private static final String INSERT_INTO_CONNECTION_POOLS_TABLE = """
+            INSERT INTO %s(id, %s)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """.formatted(CONNECTION_POOLS_TABLE_NAME, CONNECTION_POOLS_VALUE_COLUMNS);
+    private static final String DELETE_FROM_CONNECTION_POOLS_TABLE = """
+            DELETE FROM %s WHERE id=?
+            """.formatted(CONNECTION_POOLS_TABLE_NAME);
+
     private static final Logger LOG = LoggerFactory.getLogger(HerdDBConfigurationStore.class);
 
     private static final Pattern SENSITIVE_PROPERTY = Pattern.compile("(?i)password|secret|hmac");
@@ -250,7 +296,8 @@ public class HerdDBConfigurationStore implements ConfigurationStore {
                     CREATE_CONFIG_TABLE,
                     CREATE_KEYPAIR_TABLE,
                     CREATE_DIGITAL_CERTIFICATES_TABLE,
-                    CREATE_ACME_CHALLENGE_TOKENS_TABLE
+                    CREATE_ACME_CHALLENGE_TOKENS_TABLE,
+                    CREATE_CONNECTION_POOLS_TABLE
             );
             tablesDDL.forEach((tableDDL) -> {
                 try (PreparedStatement ps = con.prepareStatement(tableDDL)) {
@@ -609,6 +656,109 @@ public class HerdDBConfigurationStore implements ConfigurationStore {
             LOG.error("Error while performing deleting of ACME challenge token with id: {}", id, err);
             throw new ConfigurationStoreException(err);
         }
+    }
+
+    @Override
+    public Collection<ConnectionPoolEntry> loadConnectionPools() {
+        final List<ConnectionPoolEntry> pools = new ArrayList<>();
+        try (Connection con = datasource.getConnection();
+                PreparedStatement ps = con.prepareStatement(SELECT_ALL_FROM_CONNECTION_POOLS_TABLE);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                pools.add(new ConnectionPoolEntry(
+                        rs.getString(1),
+                        rs.getString(2),
+                        rs.getBoolean(3),
+                        rs.getBoolean(4),
+                        nullableInt(rs, 5),
+                        nullableInt(rs, 6),
+                        nullableInt(rs, 7),
+                        nullableInt(rs, 8),
+                        nullableInt(rs, 9),
+                        nullableInt(rs, 10),
+                        nullableInt(rs, 11),
+                        nullableInt(rs, 12),
+                        nullableInt(rs, 13),
+                        nullableInt(rs, 14)
+                ));
+            }
+            return pools;
+        } catch (SQLException err) {
+            LOG.error("Error while loading connection pools from database", err);
+            throw new ConfigurationStoreException(err);
+        }
+    }
+
+    @Override
+    public void saveConnectionPool(final ConnectionPoolEntry pool) {
+        try (Connection con = datasource.getConnection();
+                PreparedStatement psUpdate = con.prepareStatement(UPDATE_CONNECTION_POOLS_TABLE);
+                PreparedStatement psInsert = con.prepareStatement(INSERT_INTO_CONNECTION_POOLS_TABLE)) {
+            final int idIndex = bindConnectionPoolValues(psUpdate, pool, 1);
+            psUpdate.setString(idIndex, pool.id());
+            if (psUpdate.executeUpdate() == 0) {
+                psInsert.setString(1, pool.id());
+                bindConnectionPoolValues(psInsert, pool, 2);
+                psInsert.executeUpdate();
+            }
+        } catch (SQLException err) {
+            LOG.error("Error while saving connection pool with id: {}", pool.id(), err);
+            throw new ConfigurationStoreException(err);
+        }
+    }
+
+    @Override
+    public void deleteConnectionPool(final String id) {
+        try (Connection con = datasource.getConnection();
+                PreparedStatement psDelete = con.prepareStatement(DELETE_FROM_CONNECTION_POOLS_TABLE)) {
+            LOG.info("Deleting connection pool with id \"{}\"", id);
+            psDelete.setString(1, id);
+            psDelete.executeUpdate();
+        } catch (SQLException err) {
+            LOG.error("Error while deleting connection pool with id: {}", id, err);
+            throw new ConfigurationStoreException(err);
+        }
+    }
+
+    /**
+     * Bind every column of a connection pool but its ID, in the order of {@link #CONNECTION_POOLS_VALUE_COLUMNS}.
+     *
+     * @param ps    the statement to bind the values to
+     * @param pool  the pool to read the values from
+     * @param index the index of the first value to bind
+     * @return the index right after the last bound value
+     * @throws SQLException if binding a value fails
+     */
+    private static int bindConnectionPoolValues(final PreparedStatement ps, final ConnectionPoolEntry pool, final int index) throws SQLException {
+        int next = index;
+        ps.setString(next++, pool.domain());
+        ps.setBoolean(next++, pool.enabled());
+        ps.setBoolean(next++, pool.keepAlive());
+        next = setNullableInt(ps, next, pool.maxConnectionsPerEndpoint());
+        next = setNullableInt(ps, next, pool.borrowTimeout());
+        next = setNullableInt(ps, next, pool.connectTimeout());
+        next = setNullableInt(ps, next, pool.stuckRequestTimeout());
+        next = setNullableInt(ps, next, pool.idleTimeout());
+        next = setNullableInt(ps, next, pool.maxLifeTime());
+        next = setNullableInt(ps, next, pool.disposeTimeout());
+        next = setNullableInt(ps, next, pool.keepaliveIdle());
+        next = setNullableInt(ps, next, pool.keepaliveInterval());
+        next = setNullableInt(ps, next, pool.keepaliveCount());
+        return next;
+    }
+
+    private static int setNullableInt(final PreparedStatement ps, final int index, final Integer value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.INTEGER);
+        } else {
+            ps.setInt(index, value);
+        }
+        return index + 1;
+    }
+
+    private static Integer nullableInt(final ResultSet rs, final int index) throws SQLException {
+        final int value = rs.getInt(index);
+        return rs.wasNull() ? null : value;
     }
 
 }

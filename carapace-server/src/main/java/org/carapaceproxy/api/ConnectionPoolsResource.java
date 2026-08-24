@@ -21,17 +21,7 @@ package org.carapaceproxy.api;
 
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.summingInt;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_BORROW_TIMEOUT;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_CONNECT_TIMEOUT;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_DISPOSE_TIMEOUT;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_IDLE_TIMEOUT;
 import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_KEEPALIVE;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_KEEPALIVE_COUNT;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_KEEPALIVE_IDLE;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_KEEPALIVE_INTERVAL;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_MAX_CONNECTIONS_PER_ENDPOINT;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_MAX_LIFETIME;
-import static org.carapaceproxy.server.config.ConnectionPoolConfiguration.DEFAULT_STUCK_REQUEST_TIMEOUT;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -55,8 +45,8 @@ import org.carapaceproxy.api.response.FormValidationResponse;
 import org.carapaceproxy.api.response.SimpleResponse;
 import org.carapaceproxy.core.HttpProxyServer;
 import org.carapaceproxy.server.config.ConfigurationChangeInProgressException;
-import org.carapaceproxy.server.config.ConfigurationNotValidException;
 import org.carapaceproxy.server.config.ConnectionPoolConfiguration;
+import org.carapaceproxy.server.config.ConnectionPoolEntry;
 import org.carapaceproxy.utils.StringUtils;
 
 /**
@@ -71,6 +61,13 @@ public class ConnectionPoolsResource {
     @Context
     private ServletContext context;
 
+    /**
+     * A connection pool as the API exchanges it.
+     * <br>
+     * The numeric fields are nullable on the way in: leaving one out means that the pool inherits
+     * the global {@code connectionsmanager.*} value, and keeps following it when it changes.
+     * On the way out they are always set, because they are read from an already resolved configuration.
+     */
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
@@ -78,16 +75,16 @@ public class ConnectionPoolsResource {
 
         private String id;
         private String domain;
-        private int maxConnectionsPerEndpoint = DEFAULT_MAX_CONNECTIONS_PER_ENDPOINT;
-        private int borrowTimeout = DEFAULT_BORROW_TIMEOUT;
-        private int connectTimeout = DEFAULT_CONNECT_TIMEOUT;
-        private int stuckRequestTimeout = DEFAULT_STUCK_REQUEST_TIMEOUT;
-        private int idleTimeout = DEFAULT_IDLE_TIMEOUT;
-        private int maxLifeTime = DEFAULT_MAX_LIFETIME;
-        private int disposeTimeout = DEFAULT_DISPOSE_TIMEOUT;
-        private int keepaliveIdle = DEFAULT_KEEPALIVE_IDLE;
-        private int keepaliveInterval = DEFAULT_KEEPALIVE_INTERVAL;
-        private int keepaliveCount = DEFAULT_KEEPALIVE_COUNT;
+        private Integer maxConnectionsPerEndpoint;
+        private Integer borrowTimeout;
+        private Integer connectTimeout;
+        private Integer stuckRequestTimeout;
+        private Integer idleTimeout;
+        private Integer maxLifeTime;
+        private Integer disposeTimeout;
+        private Integer keepaliveIdle;
+        private Integer keepaliveInterval;
+        private Integer keepaliveCount;
         private boolean keepAlive = DEFAULT_KEEPALIVE;
         private boolean enabled;
 
@@ -113,10 +110,12 @@ public class ConnectionPoolsResource {
             );
         }
 
-        private ConnectionPoolConfiguration asConfiguration() {
-            return new ConnectionPoolConfiguration(
+        private ConnectionPoolEntry asEntry() {
+            return new ConnectionPoolEntry(
                     getId(),
                     getDomain(),
+                    isEnabled(),
+                    isKeepAlive(),
                     getMaxConnectionsPerEndpoint(),
                     getBorrowTimeout(),
                     getConnectTimeout(),
@@ -126,9 +125,7 @@ public class ConnectionPoolsResource {
                     getDisposeTimeout(),
                     getKeepaliveIdle(),
                     getKeepaliveInterval(),
-                    getKeepaliveCount(),
-                    isKeepAlive(),
-                    isEnabled()
+                    getKeepaliveCount()
             );
         }
     }
@@ -191,9 +188,9 @@ public class ConnectionPoolsResource {
             return FormValidationResponse.fieldConflict("id");
         }
         try {
-            server.rewriteConfiguration(it -> it.addConnectionPool(connectionPool.asConfiguration()));
+            server.applyConnectionPoolChange(it -> it.saveConnectionPool(connectionPool.asEntry()));
             return SimpleResponse.created();
-        } catch (ConfigurationChangeInProgressException | InterruptedException | ConfigurationNotValidException e) {
+        } catch (ConfigurationChangeInProgressException | InterruptedException e) {
             return SimpleResponse.error(e);
         }
     }
@@ -217,9 +214,9 @@ public class ConnectionPoolsResource {
             throw new WebApplicationException(Response.Status.NOT_FOUND);
         }
         try {
-            server.rewriteConfiguration(it -> it.updateConnectionPool(connectionPool.asConfiguration()));
+            server.applyConnectionPoolChange(it -> it.saveConnectionPool(connectionPool.asEntry()));
             return SimpleResponse.ok();
-        } catch (ConfigurationChangeInProgressException | InterruptedException | ConfigurationNotValidException e) {
+        } catch (ConfigurationChangeInProgressException | InterruptedException e) {
             return SimpleResponse.error(e);
         }
     }
@@ -234,9 +231,9 @@ public class ConnectionPoolsResource {
             throw new WebApplicationException(Response.Status.NOT_FOUND);
         }
         try {
-            server.rewriteConfiguration(it -> it.deleteConnectionPool(poolId));
+            server.applyConnectionPoolChange(it -> it.deleteConnectionPool(poolId));
             return SimpleResponse.ok();
-        } catch (ConfigurationChangeInProgressException | InterruptedException | ConfigurationNotValidException e) {
+        } catch (ConfigurationChangeInProgressException | InterruptedException e) {
             return SimpleResponse.error(e);
         }
     }

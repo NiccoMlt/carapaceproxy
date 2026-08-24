@@ -27,6 +27,8 @@ import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -43,6 +45,7 @@ import org.apache.bookkeeper.stats.NullStatsLogger;
 import org.carapaceproxy.api.ConfigResource;
 import org.carapaceproxy.server.certificates.DynamicCertificateState;
 import org.carapaceproxy.server.config.ConfigurationNotValidException;
+import org.carapaceproxy.server.config.ConnectionPoolEntry;
 import org.carapaceproxy.utils.TestUtils;
 import org.hamcrest.core.IsNull;
 import org.junit.After;
@@ -256,6 +259,63 @@ public class ConfigurationStoreTest {
         testKeyPairOperations();
         testCertificateOperations();
         testAcmeChallengeTokens();
+    }
+
+    @Test
+    @Parameters({"in-memory", "db"})
+    public void testConnectionPoolOperations(String type) throws Exception {
+        this.type = type;
+        updateConfigStore(new Properties());
+
+        assertThat(store.loadConnectionPools(), is(empty()));
+
+        // a pool that pins every value, and one that inherits every value it can
+        final ConnectionPoolEntry pinned = new ConnectionPoolEntry(
+                d1, d1, true, false, 20, 21_000, 22_000, 23_000, 24_000, 25_000, 26_000, 250, 25, 2
+        );
+        final ConnectionPoolEntry inherited = new ConnectionPoolEntry(
+                d2, "localhost[0-9]", false, true, null, null, null, null, null, null, null, null, null, null
+        );
+        store.saveConnectionPool(pinned);
+        store.saveConnectionPool(inherited);
+        assertThat(store.loadConnectionPools(), containsInAnyOrder(pinned, inherited));
+
+        // saving an existing pool replaces it rather than adding a second one
+        final ConnectionPoolEntry updated = new ConnectionPoolEntry(
+                d1, "localhost[a-z]", false, true, 30, null, null, null, null, null, null, null, null, null
+        );
+        store.saveConnectionPool(updated);
+        assertThat(store.loadConnectionPools(), containsInAnyOrder(updated, inherited));
+
+        store.deleteConnectionPool(d1);
+        assertThat(store.loadConnectionPools(), containsInAnyOrder(inherited));
+
+        // deleting a pool that is not there is not an error
+        store.deleteConnectionPool(d1);
+        assertThat(store.loadConnectionPools(), containsInAnyOrder(inherited));
+    }
+
+    @Test
+    public void testConnectionPoolsPersistency() {
+        Properties props = new Properties();
+        props.put("db.jdbc.url", "jdbc:herddb:localhost");
+        store = new HerdDBConfigurationStore(
+                new PropertiesConfigurationStore(props), false, null, tmpDir.getRoot(), NullStatsLogger.INSTANCE
+        );
+
+        final ConnectionPoolEntry pool = new ConnectionPoolEntry(
+                d1, d1, true, false, 20, null, 22_000, null, 24_000, null, 26_000, null, 25, null
+        );
+        store.saveConnectionPool(pool);
+        store.close();
+
+        // reopening the store must give back the very same pool, NULL columns included
+        props = new Properties();
+        props.put("db.jdbc.url", "jdbc:herddb:localhost");
+        store = new HerdDBConfigurationStore(
+                new PropertiesConfigurationStore(props), false, null, tmpDir.getRoot(), NullStatsLogger.INSTANCE
+        );
+        assertThat(store.loadConnectionPools(), containsInAnyOrder(pool));
     }
 
     private void testKeyPairOperations() {

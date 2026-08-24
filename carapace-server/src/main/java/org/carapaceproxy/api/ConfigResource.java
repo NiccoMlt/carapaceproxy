@@ -33,6 +33,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Response;
 import org.carapaceproxy.api.response.SimpleResponse;
+import org.carapaceproxy.configstore.ConfigurationKeys;
 import org.carapaceproxy.configstore.PropertiesConfigurationStore;
 import org.carapaceproxy.core.HttpProxyServer;
 import org.carapaceproxy.server.config.ConfigurationChangeInProgressException;
@@ -149,6 +150,7 @@ public class ConfigResource {
         if (count[0] == 0) {
             throw new ConfigurationNotValidException("No entries in the new configuration ?");
         }
+        ConfigurationKeys.warnAboutUnknownProperties(simpleStore);
     }
 
     public static final class ConfigurationChangeResult {

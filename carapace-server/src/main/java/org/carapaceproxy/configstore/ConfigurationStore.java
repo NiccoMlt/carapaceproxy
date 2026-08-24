@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.security.KeyPair;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Properties;
@@ -33,6 +34,7 @@ import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 import org.carapaceproxy.core.RuntimeServerConfiguration;
 import org.carapaceproxy.server.config.ConfigurationNotValidException;
+import org.carapaceproxy.server.config.ConnectionPoolEntry;
 
 /**
  * Abstraction over a configuration storage.
@@ -240,4 +242,27 @@ public interface ConfigurationStore extends AutoCloseable {
     String loadAcmeChallengeToken(String id);
 
     void deleteAcmeChallengeToken(String id);
+
+    /**
+     * Load every stored connection pool.
+     * The entries are returned as they are stored, so their inherited values are still {@code null}:
+     * see {@link ConnectionPoolEntry#resolve(org.carapaceproxy.server.config.ConnectionPoolConfiguration)}.
+     *
+     * @return the stored connection pools, in no particular order
+     */
+    Collection<ConnectionPoolEntry> loadConnectionPools();
+
+    /**
+     * Store a connection pool, replacing the one with the same {@link ConnectionPoolEntry#id() id} if any.
+     *
+     * @param pool the pool to store
+     */
+    void saveConnectionPool(ConnectionPoolEntry pool);
+
+    /**
+     * Drop a connection pool. Deleting a pool that is not stored is not an error.
+     *
+     * @param id the ID of the pool to drop
+     */
+    void deleteConnectionPool(String id);
 }

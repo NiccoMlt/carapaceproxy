@@ -46,6 +46,7 @@ import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.function.Consumer;
 import org.carapaceproxy.api.ConnectionPoolsResource;
 import org.carapaceproxy.api.UseAdminServer;
 import org.carapaceproxy.core.ConnectionsManager;
@@ -132,31 +133,59 @@ public class ConnectionPoolTest extends UseAdminServer {
         config.put("connectionsmanager.keepaliveinterval", "50");
         config.put("connectionsmanager.keepalivecount", "5");
 
+        changeDynamicConfiguration(config);
+
+        // connection pools are state: they are created through the API, not through the configuration
+
         // Custom connection pool (with defaults)
-        config.put("connectionpool.1.id", "localhost");
-        config.put("connectionpool.1.domain", "localhost");
-        config.put("connectionpool.1.enabled", "true");
+        createConnectionPool(pool("localhost", "localhost", true, p -> {
+        }));
 
         // Custom connection pool (disabled)
-        config.put("connectionpool.2.id", "localhost2");
-        config.put("connectionpool.2.domain", "localhost2");
-        config.put("connectionpool.2.enabled", "false");
+        createConnectionPool(pool("localhost2", "localhost2", false, p -> {
+        }));
 
         // Custom connection pool
-        config.put("connectionpool.3.id", "localhosts");
-        config.put("connectionpool.3.domain", "localhost[0-9]");
-        config.put("connectionpool.3.maxconnectionsperendpoint", "20");
-        config.put("connectionpool.3.borrowtimeout", "21000");
-        config.put("connectionpool.3.connecttimeout", "22000");
-        config.put("connectionpool.3.stuckrequesttimeout", "23000");
-        config.put("connectionpool.3.idletimeout", "24000");
-        config.put("connectionpool.3.disposetimeout", "25000");
-        config.put("connectionpool.3.keepaliveidle", "250");
-        config.put("connectionpool.3.keepaliveinterval", "25");
-        config.put("connectionpool.3.keepalivecount", "2");
-        config.put("connectionpool.3.enabled", "true");
+        createConnectionPool(pool("localhosts", "localhost[0-9]", true, p -> {
+            p.setMaxConnectionsPerEndpoint(20);
+            p.setBorrowTimeout(21_000);
+            p.setConnectTimeout(22_000);
+            p.setStuckRequestTimeout(23_000);
+            p.setIdleTimeout(24_000);
+            p.setDisposeTimeout(25_000);
+            p.setKeepaliveIdle(250);
+            p.setKeepaliveInterval(25);
+            p.setKeepaliveCount(2);
+        }));
+    }
 
-        changeDynamicConfiguration(config);
+    /**
+     * Build a connection pool bean, leaving every value the customizer does not set to be inherited.
+     *
+     * @param id         ID of the pool
+     * @param domain     domain of the pool
+     * @param enabled    whether the pool is enabled
+     * @param customizer sets the values the pool pins
+     * @return the bean, ready to be posted
+     */
+    private static ConnectionPoolsResource.ConnectionPoolBean pool(
+            final String id,
+            final String domain,
+            final boolean enabled,
+            final Consumer<ConnectionPoolsResource.ConnectionPoolBean> customizer) {
+        final var pool = new ConnectionPoolsResource.ConnectionPoolBean();
+        pool.setId(id);
+        pool.setDomain(domain);
+        pool.setEnabled(enabled);
+        customizer.accept(pool);
+        return pool;
+    }
+
+    private void createConnectionPool(final ConnectionPoolsResource.ConnectionPoolBean pool) throws Exception {
+        try (RawHttpClient client = new RawHttpClient("localhost", 8761)) {
+            RawHttpClient.HttpResponse response = client.post("/api/connectionpools", null, pool, credentials);
+            assertThat(response.getStatusLine(), containsString("201"));
+        }
     }
 
     @Test

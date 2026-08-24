@@ -63,6 +63,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import javax.servlet.DispatcherType;
 import lombok.Data;
 import lombok.Getter;
@@ -79,6 +80,7 @@ import org.carapaceproxy.cluster.impl.NullGroupMembershipHandler;
 import org.carapaceproxy.cluster.impl.ZooKeeperGroupMembershipHandler;
 import org.carapaceproxy.configstore.CertificateData;
 import org.carapaceproxy.configstore.ConfigurationConsumer;
+import org.carapaceproxy.configstore.ConfigurationKeys;
 import org.carapaceproxy.configstore.ConfigurationStore;
 import org.carapaceproxy.configstore.HerdDBConfigurationStore;
 import org.carapaceproxy.configstore.PropertiesConfigurationStore;
@@ -275,6 +277,26 @@ public class HttpProxyServer implements AutoCloseable {
         // Best practice is to reuse EventLoopGroup
         // http://normanmaurer.me/presentations/2014-facebook-eng-netty/slides.html#25.0
         this.eventLoopGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
+    }
+
+    /**
+     * Apply a change to the connection pools, which are state rather than configuration:
+     * the change is written straight to the store, the running configuration is rebuilt from it,
+     * and the other peers are told to do the same.
+     * <br>
+     * The store is written before the reload, as {@link #updateDynamicCertificateForDomain(CertificateData)} does:
+     * should the reload fail, the change is already persisted and the next reload will pick it up.
+     *
+     * @param mutation the change to apply to the store
+     * @throws InterruptedException                   if the reload gets interrupted
+     * @throws ConfigurationChangeInProgressException if another configuration change is already running
+     */
+    public void applyConnectionPoolChange(final Consumer<ConfigurationStore> mutation) throws InterruptedException, ConfigurationChangeInProgressException {
+        mutation.accept(dynamicConfigurationStore);
+        applyDynamicConfiguration(null, true);
+
+        // this will trigger a reload on other peers
+        groupMembershipHandler.fireEvent("configurationChange", null);
     }
 
     public void rewriteConfiguration(final ConfigurationConsumer function) throws ConfigurationNotValidException, InterruptedException, ConfigurationChangeInProgressException {
@@ -550,6 +572,8 @@ public class HttpProxyServer implements AutoCloseable {
 
         this.dynamicCertificatesManager.setConfigurationStore(dynamicConfigurationStore);
 
+        ConfigurationKeys.warnAboutUnknownProperties(dynamicConfigurationStore);
+
         // "static" configuration cannot change without a reboot
         applyStaticConfiguration(bootConfigurationStore);
         // need to be done after static configuration loading in order to know peer info
@@ -651,6 +675,9 @@ public class HttpProxyServer implements AutoCloseable {
 
         // Try to perform a service configuration from the passed store.
         newConfiguration.configure(simpleStore);
+        // connection pools are state: they come from the store the server keeps its state in, whatever
+        // configuration is being applied, otherwise applying one would wipe every pool
+        newConfiguration.configureConnectionPools(dynamicConfigurationStore);
         buildMapper(newConfiguration.getMapperClassname(), this, simpleStore);
         buildRealm(userRealmClassname, simpleStore);
 
@@ -752,16 +779,16 @@ public class HttpProxyServer implements AutoCloseable {
         groupMembershipHandler.fireEvent("configurationChange", null);
     }
 
-    private void applyDynamicConfiguration(ConfigurationStore newConfigurationStore, boolean atBoot) throws InterruptedException, ConfigurationChangeInProgressException {
-        if (atBoot && newConfigurationStore != null) {
+    private void applyDynamicConfiguration(ConfigurationStore newConfigurationStore, boolean reloadFromStore) throws InterruptedException, ConfigurationChangeInProgressException {
+        if (reloadFromStore && newConfigurationStore != null) {
             throw new IllegalStateException();
         }
-        if (!atBoot && newConfigurationStore == null) {
+        if (!reloadFromStore && newConfigurationStore == null) {
             throw new IllegalStateException();
         }
-        // at boot we are constructing a configuration from the database
-        // if the system is already "up" we have to only apply the new config
-        ConfigurationStore storeWithConfig = atBoot ? dynamicConfigurationStore : newConfigurationStore;
+        // when reloading we are constructing a configuration from the store, as at boot or on a peer event
+        // if we are being handed a new configuration instead, we have to apply it and persist it
+        ConfigurationStore storeWithConfig = reloadFromStore ? dynamicConfigurationStore : newConfigurationStore;
         if (!configurationLock.tryLock()) {
             throw new ConfigurationChangeInProgressException();
         }
@@ -788,7 +815,7 @@ public class HttpProxyServer implements AutoCloseable {
                 proxyRequestsManager.reloadConfiguration(newConfiguration, newBackends.values());
             }
 
-            if (!atBoot) {
+            if (!reloadFromStore) {
                 dynamicConfigurationStore.commitConfiguration(newConfigurationStore);
             }
 

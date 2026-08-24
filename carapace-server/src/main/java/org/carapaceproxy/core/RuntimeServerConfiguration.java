@@ -240,7 +240,7 @@ public class RuntimeServerConfiguration {
         configureCertificates(properties);
         configureListeners(properties);
         configureFilters(properties);
-        configureConnectionPools(properties);
+        configureDefaultConnectionPool();
 
         healthProbePeriod = properties.getInt("healthmanager.period", DEFAULT_PROBE_PERIOD);
         LOG.info("healthmanager.period={}", healthProbePeriod);
@@ -476,54 +476,13 @@ public class RuntimeServerConfiguration {
         }
     }
 
-    private void configureConnectionPools(ConfigurationStore properties) throws ConfigurationNotValidException {
-        int max = properties.findMaxIndexForPrefix("connectionpool");
-        for (int i = 0; i <= max; i++) {
-            final String prefix = "connectionpool." + i + ".";
-            String id = properties.getString(prefix + "id", "");
-            if (id.isEmpty()) {
-                continue;
-            }
-            String domain = properties.getString(prefix + "domain", "");
-            if (domain.isEmpty()) {
-                throw new ConfigurationNotValidException(
-                        "Invalid connection pool configuration: domain cannot be empty"
-                );
-            }
-            int maxconnectionsperendpoint = properties.getInt(prefix + "maxconnectionsperendpoint", maxConnectionsPerEndpoint);
-            int borrowtimeout = properties.getInt(prefix + "borrowtimeout", borrowTimeout);
-            int connecttimeout = properties.getInt(prefix + "connecttimeout", connectTimeout);
-            int stuckrequesttimeout = properties.getInt(prefix + "stuckrequesttimeout", stuckRequestTimeout);
-            int idletimeout = properties.getInt(prefix + "idletimeout", idleTimeout);
-            int maxlifetime = properties.getInt(prefix + "maxlifetime", maxLifeTime);
-            int disposetimeout = properties.getInt(prefix + "disposetimeout", disposeTimeout);
-            int keepaliveidle = properties.getInt(prefix + "keepaliveidle", keepaliveIdle);
-            int keepaliveinterval = properties.getInt(prefix + "keepaliveinterval", keepaliveInterval);
-            int keepalivecount = properties.getInt(prefix + "keepalivecount", keepaliveCount);
-            boolean enabled = properties.getBoolean(prefix + "enabled", false);
-            boolean keepAlive = properties.getBoolean(prefix + "keepalive", true);
-
-            ConnectionPoolConfiguration connectionPool = new ConnectionPoolConfiguration(
-                    id,
-                    domain,
-                    maxconnectionsperendpoint,
-                    borrowtimeout,
-                    connecttimeout,
-                    stuckrequesttimeout,
-                    idletimeout,
-                    maxlifetime,
-                    disposetimeout,
-                    keepaliveidle,
-                    keepaliveinterval,
-                    keepalivecount,
-                    keepAlive,
-                    enabled
-            );
-            connectionPools.put(id, connectionPool);
-            LOG.info("Configured connectionpool.{}: {}", i, connectionPool);
-        }
-
-        // default connection pool
+    /**
+     * Build the default connection pool out of the global {@code connectionsmanager.*} values.
+     * <br>
+     * It doubles as the carrier of the values a {@link #configureConnectionPools(ConfigurationStore) stored pool}
+     * can inherit, so it has to be built before them.
+     */
+    private void configureDefaultConnectionPool() {
         defaultConnectionPool = new ConnectionPoolConfiguration(
                 "*", "*",
                 getMaxConnectionsPerEndpoint(),
@@ -540,6 +499,22 @@ public class RuntimeServerConfiguration {
                 true
         );
         LOG.info("Configured default connectionpool: {}", defaultConnectionPool);
+    }
+
+    /**
+     * Load the connection pools from the store that holds the state.
+     * <br>
+     * Pools are state, not configuration: they are read from wherever the server keeps its state,
+     * and not from the configuration being applied, which knows nothing about them.
+     *
+     * @param state the store holding the state
+     */
+    public void configureConnectionPools(final ConfigurationStore state) {
+        for (final var entry : state.loadConnectionPools()) {
+            final var connectionPool = entry.resolve(defaultConnectionPool);
+            connectionPools.put(entry.id(), connectionPool);
+            LOG.info("Configured connectionpool {}: {}", entry.id(), connectionPool);
+        }
     }
 
     public void addListener(NetworkListenerConfiguration listener) throws ConfigurationNotValidException {

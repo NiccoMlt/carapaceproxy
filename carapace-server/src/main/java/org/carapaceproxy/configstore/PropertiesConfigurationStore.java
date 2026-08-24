@@ -20,6 +20,8 @@
 package org.carapaceproxy.configstore;
 
 import java.security.KeyPair;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Spliterator;
@@ -28,12 +30,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
-import org.carapaceproxy.server.config.ConnectionPoolConfiguration;
+import org.carapaceproxy.server.config.ConnectionPoolEntry;
 
 /**
  * Configuration storage implementation tha reads the configuration from a Java {@link Properties} file.
  * It resides in memory,
  * and it does <b>not</b> support {@link #commitConfiguration(ConfigurationStore) commiting} changes.
+ * <br>
+ * The state it holds - certificates, key pairs, connection pools - lives in memory as well,
+ * so it does not survive a restart.
  *
  * @author enrico.olivelli
  */
@@ -44,6 +49,7 @@ public class PropertiesConfigurationStore implements ConfigurationStore {
     private final ConcurrentHashMap<String, KeyPair> domainsKeyPair = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> acmeChallengeTokens = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, KeyPair> acmeUserKeys = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConnectionPoolEntry> connectionPools = new ConcurrentHashMap<>();
 
     public PropertiesConfigurationStore(Properties properties) {
         this.properties = properties;
@@ -165,41 +171,18 @@ public class PropertiesConfigurationStore implements ConfigurationStore {
         acmeChallengeTokens.remove(id);
     }
 
-    public void addConnectionPool(final ConnectionPoolConfiguration connectionPool) {
-        saveConnectionPool(connectionPool, findMaxIndexForPrefix("connectionpool") + 1);
+    @Override
+    public Collection<ConnectionPoolEntry> loadConnectionPools() {
+        return List.copyOf(connectionPools.values());
     }
 
-    private void saveConnectionPool(final ConnectionPoolConfiguration connectionPool, final int index) {
-        final var prefix = "connectionpool." + index + ".";
-        properties.setProperty(prefix + "id", connectionPool.getId());
-        properties.setProperty(prefix + "domain", connectionPool.getDomain());
-        properties.setProperty(prefix + "maxconnectionsperendpoint", String.valueOf(connectionPool.getMaxConnectionsPerEndpoint()));
-        properties.setProperty(prefix + "borrowtimeout", String.valueOf(connectionPool.getBorrowTimeout()));
-        properties.setProperty(prefix + "connecttimeout", String.valueOf(connectionPool.getConnectTimeout()));
-        properties.setProperty(prefix + "stuckrequesttimeout", String.valueOf(connectionPool.getStuckRequestTimeout()));
-        properties.setProperty(prefix + "idletimeout", String.valueOf(connectionPool.getIdleTimeout()));
-        properties.setProperty(prefix + "maxlifetime", String.valueOf(connectionPool.getMaxLifeTime()));
-        properties.setProperty(prefix + "disposetimeout", String.valueOf(connectionPool.getDisposeTimeout()));
-        properties.setProperty(prefix + "keepaliveidle", String.valueOf(connectionPool.getKeepaliveIdle()));
-        properties.setProperty(prefix + "keepaliveinterval", String.valueOf(connectionPool.getKeepaliveInterval()));
-        properties.setProperty(prefix + "keepalivecount", String.valueOf(connectionPool.getKeepaliveCount()));
-        properties.setProperty(prefix + "enabled", String.valueOf(connectionPool.isEnabled()));
-        properties.setProperty(prefix + "keepalive", String.valueOf(connectionPool.isKeepAlive()));
+    @Override
+    public void saveConnectionPool(final ConnectionPoolEntry pool) {
+        connectionPools.put(pool.id(), pool);
     }
 
-    public void updateConnectionPool(final ConnectionPoolConfiguration connectionPool) {
-        final var max = findMaxIndexForPrefix("connectionpool");
-        for (int index = 0; index <= max; index++) {
-            final var prefix = "connectionpool." + index + ".";
-            final var id = properties.getProperty(prefix + "id", null);
-            if (connectionPool.getId().equals(id)) {
-                saveConnectionPool(connectionPool, index);
-                return;
-            }
-        }
-    }
-
+    @Override
     public void deleteConnectionPool(final String id) {
-        this.removePropertiesAtId("connectionpool", id);
+        connectionPools.remove(id);
     }
 }
