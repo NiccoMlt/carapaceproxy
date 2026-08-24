@@ -129,7 +129,7 @@
         <libs.spotbugs.plugin>4.10.3.0</libs.spotbugs.plugin>
         <libs.protobuf>3.25.5</libs.protobuf>
 
-        <!-- test dependecies -->
+        <!-- test dependencies -->
         <libs.junit>4.13.2</libs.junit>
         <libs.junitparams>1.1.1</libs.junitparams>
         <libs.wiremock>3.13.1</libs.wiremock>
