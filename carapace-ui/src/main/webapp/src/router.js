@@ -18,21 +18,7 @@ import Metrics from './components/Metrics';
 import Peers from './components/Peers';
 import Headers from './components/Headers';
 
-Vue.component('backends', Backends);
-Vue.component('connection-pools', ConnectionPools);
-Vue.component('routes', Routes);
-Vue.component('actions', Actions);
-Vue.component('directors', Directors);
-Vue.component('cache', Cache);
-Vue.component('listeners', Listeners);
-Vue.component('userrealm', UserRealm);
-Vue.component('requestfilters', RequestFilters);
-Vue.component('certificates', Certificates);
 Vue.component('datatable-list', DatatableList);
-Vue.component('configuration', Configuration);
-Vue.component('metrics', Metrics);
-Vue.component('peers', Peers);
-Vue.component('headers', Headers);
 
 Vue.use(Router);
 
