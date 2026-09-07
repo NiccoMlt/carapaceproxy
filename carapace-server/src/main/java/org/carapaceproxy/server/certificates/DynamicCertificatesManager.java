@@ -294,9 +294,10 @@ public class DynamicCertificatesManager implements Runnable {
         for (CertificateData data : _certificates) {
             var updateCertificate = true;
             final var domain = data.getDomain();
+            CertificateData cert = null;
             try {
                 // this has to be always fetch from db!
-                CertificateData cert = loadOrCreateDynamicCertificateForDomain(domain, data.getSubjectAltNames(), false, data.getDaysBeforeRenewal());
+                cert = loadOrCreateDynamicCertificateForDomain(domain, data.getSubjectAltNames(), false, data.getDaysBeforeRenewal());
                 if (isAcmeStep(cert)) {
                     // domains are sorted, so the first N take the slots and the window slides as they become AVAILABLE
                     if (rateLimit > 0 && acmeSteps >= rateLimit) {
@@ -385,6 +386,16 @@ public class DynamicCertificatesManager implements Runnable {
                 // RuntimeException included on purpose, as an escaped one would silently cancel the scheduled task;
                 // this would kill the renewal loop for every certificate
                 LOG.error("Error while handling dynamic certificate for domain {}", domain, ex);
+                if (cert != null && !AcmeFailureClassifier.isTransient(ex)) {
+                    cert.error(ex.getMessage() != null ? ex.getMessage() : ex.toString());
+                    try {
+                        store.saveCertificate(cert);
+                        flushCache = true;
+                    } catch (RuntimeException storeEx) {
+                        // same rationale as above: a db hiccup must not cancel the scheduled task
+                        LOG.error("Error while saving failed certificate for domain {}", domain, storeEx);
+                    }
+                }
             }
         }
         if (flushCache) {
