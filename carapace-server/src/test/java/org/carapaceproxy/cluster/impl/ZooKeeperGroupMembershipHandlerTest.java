@@ -24,11 +24,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.curator.test.TestingServer;
 import org.carapaceproxy.cluster.GroupMembershipHandler;
 import org.carapaceproxy.utils.TestUtils;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import java.util.HashMap;
@@ -38,6 +41,11 @@ import lombok.NoArgsConstructor;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.LoggerFactory;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 public class ZooKeeperGroupMembershipHandlerTest {
 
@@ -281,6 +289,59 @@ public class ZooKeeperGroupMembershipHandlerTest {
                     assertNull(info);
                 }
             }
+        }
+    }
+
+    @Test
+    public void testExecuteInMutex() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(ZooKeeperGroupMembershipHandler.class);
+        ListAppender<ILoggingEvent> errors = new ListAppender<>();
+        errors.start();
+        logger.addAppender(errors);
+        try (TestingServer testingServer = new TestingServer(2229, tmpDir.newFolder())) {
+            testingServer.start();
+            try (ZooKeeperGroupMembershipHandler peer1 = new ZooKeeperGroupMembershipHandler(testingServer.getConnectString(),
+                    6000, false /*acl */, peerId1, Collections.EMPTY_MAP, new Properties());
+                    ZooKeeperGroupMembershipHandler peer2 = new ZooKeeperGroupMembershipHandler(testingServer.getConnectString(),
+                            6000, false /*acl */, peerId2, Collections.EMPTY_MAP, new Properties())) {
+                peer1.start();
+                peer2.start();
+                errors.list.clear(); // drop the connection noise logged at startup
+
+                // peer1 holds the mutex from another thread (the Curator mutex is reentrant per thread)
+                CountDownLatch held = new CountDownLatch(1);
+                CountDownLatch release = new CountDownLatch(1);
+                Thread holder = new Thread(() -> peer1.executeInMutex("m", 10, () -> {
+                    held.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }));
+                holder.start();
+                held.await();
+
+                // peer2 times out: nothing runs and nothing is released
+                AtomicBoolean ran = new AtomicBoolean();
+                peer2.executeInMutex("m", 1, () -> ran.set(true));
+                assertFalse(ran.get());
+                assertEquals(List.of(), errors.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList());
+                release.countDown();
+                holder.join();
+
+                // a failing runnable is logged as such and the mutex is released for the next caller
+                peer1.executeInMutex("m", 10, () -> {
+                    throw new IllegalStateException("boom");
+                });
+                peer2.executeInMutex("m", 1, () -> ran.set(true));
+                assertTrue(ran.get());
+                List<ILoggingEvent> logged = errors.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList();
+                assertEquals(1, logged.size());
+                assertTrue(logged.get(0).getFormattedMessage().startsWith("Error while executing in mutex"));
+            }
+        } finally {
+            logger.detachAppender(errors);
         }
     }
 }

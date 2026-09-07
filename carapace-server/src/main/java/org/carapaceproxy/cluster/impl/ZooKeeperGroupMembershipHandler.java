@@ -290,20 +290,26 @@ public class ZooKeeperGroupMembershipHandler implements GroupMembershipHandler, 
         InterProcessMutex mutex = mutexes.computeIfAbsent(mutexId, (mId) -> {
             return new InterProcessMutex(client, "/proxy/mutex/" + mutexId);
         });
+        boolean acquired = false;
         try {
-            boolean acquired = mutex.acquire(timeout, TimeUnit.SECONDS);
+            acquired = mutex.acquire(timeout, TimeUnit.SECONDS);
             if (!acquired) {
                 LOG.info("Failed to acquire lock for executeInMutex (mutexId: {}, peerId: {})", mutexId, peerId);
                 return;
             }
             runnable.run();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // restore the flag for the caller
+            LOG.info("Interrupted while waiting for mutex (mutexId: {}, peerId: {})", mutexId, peerId);
         } catch (Exception e) {
-            LOG.error("Failed to acquire lock for executeInMutex (mutexId: {}, peerId: {})", mutexId, peerId, e);
+            LOG.error("Error while executing in mutex (mutexId: {}, peerId: {})", mutexId, peerId, e);
         } finally {
-            try {
-                mutex.release();
-            } catch (Exception e) {
-                LOG.error("Failed to release lock for executeInMutex (mutexId: {}, peerId: {})", mutexId, peerId, e);
+            if (acquired) {
+                try {
+                    mutex.release();
+                } catch (Exception e) {
+                    LOG.error("Failed to release lock for executeInMutex (mutexId: {}, peerId: {})", mutexId, peerId, e);
+                }
             }
         }
     }
