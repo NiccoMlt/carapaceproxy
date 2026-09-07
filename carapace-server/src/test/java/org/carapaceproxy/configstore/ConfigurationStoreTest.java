@@ -289,6 +289,9 @@ public class ConfigurationStoreTest {
         store.saveAcmeChallengeToken("token-id", "token-data");
         store.saveAcmeChallengeToken("token-id2", "token-data2");
         assertEquals("token-data", store.loadAcmeChallengeToken("token-id"));
+        // saving an existing token must overwrite it, not fail on the primary key
+        store.saveAcmeChallengeToken("token-id", "token-data-updated");
+        assertEquals("token-data-updated", store.loadAcmeChallengeToken("token-id"));
         assertEquals("token-data2", store.loadAcmeChallengeToken("token-id2"));
         store.deleteAcmeChallengeToken("token-id");
         assertNull(store.loadAcmeChallengeToken("token-id"));

@@ -35,11 +35,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +50,8 @@ import static org.shredzone.acme4j.Status.VALID;
 import java.net.URI;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
+import java.sql.SQLException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +62,7 @@ import junitparams.Parameters;
 import org.carapaceproxy.cluster.impl.NullGroupMembershipHandler;
 import org.carapaceproxy.configstore.CertificateData;
 import org.carapaceproxy.configstore.ConfigurationStore;
+import org.carapaceproxy.configstore.ConfigurationStoreException;
 import org.carapaceproxy.configstore.PropertiesConfigurationStore;
 import org.carapaceproxy.core.HttpProxyServer;
 import org.carapaceproxy.core.Listeners;
@@ -369,6 +374,59 @@ public class DynamicCertificatesManagerTest {
         assertCertificateState("localhost2", VERIFIED, 0, man);
         assertCertificateState("localhost3", rateLimit == 0 ? VERIFIED : WAITING, 0, man);
         verify(store, times(rateLimit == 0 ? 6 : 4)).saveCertificate(any());
+    }
+
+    @Test
+    public void testStoreFailureDoesNotAbortTheRun() throws Exception {
+        // ACME mocking: one order per domain, whose http-01 challenge token is the domain itself
+        ACMEClient ac = mock(ACMEClient.class);
+        when(ac.createOrderForDomain(any())).thenAnswer(invocation -> {
+            String domain = invocation.<Collection<String>>getArgument(0).iterator().next();
+            Order o = mock(Order.class);
+            when(o.getLocation()).thenReturn(URI.create("https://localhost/order/" + domain).toURL());
+            return o;
+        });
+        when(ac.getChallengesForOrder(any())).thenAnswer(invocation -> {
+            String domain = invocation.<Order>getArgument(0).getLocation().getPath().substring("/order/".length());
+            Http01Challenge c = mock(Http01Challenge.class);
+            when(c.getToken()).thenReturn(domain);
+            when(c.getJSON()).thenReturn(JSON.parse("{\"url\": \"https://localhost/index\", \"type\": \"http-01\", \"token\": \"" + domain + "\"}"));
+            when(c.getAuthorization()).thenReturn("");
+            return Map.of(domain, c);
+        });
+
+        HttpProxyServer parent = mock(HttpProxyServer.class);
+        when(parent.getListeners()).thenReturn(mock(Listeners.class));
+        DynamicCertificatesManager man = new DynamicCertificatesManager(parent);
+        man.attachGroupMembershipHandler(new NullGroupMembershipHandler());
+        Whitebox.setInternalState(man, ac);
+
+        // Store mocking: three certificates waiting to be ordered, the store fails on the first domain's token only
+        ConfigurationStore store = mock(ConfigurationStore.class);
+        when(store.loadKeyPairForDomain(anyString())).thenReturn(KeyPairUtils.createKeyPair(DEFAULT_KEYPAIRS_SIZE));
+        doThrow(new ConfigurationStoreException(new SQLException("duplicate key"))).when(store).saveAcmeChallengeToken(eq("localhost1"), any());
+        Properties props = new Properties();
+        String[] domains = {"localhost1", "localhost2", "localhost3"};
+        for (int i = 0; i < domains.length; i++) {
+            when(store.loadCertificateForDomain(eq(domains[i]))).thenReturn(new CertificateData(domains[i], null, WAITING));
+            props.setProperty("certificate." + i + ".hostname", domains[i]);
+            props.setProperty("certificate." + i + ".mode", "acme");
+        }
+        man.setConfigurationStore(store);
+
+        // Manager setup
+        RuntimeServerConfiguration conf = new RuntimeServerConfiguration();
+        conf.configure(new PropertiesConfigurationStore(props));
+        when(parent.getCurrentConfiguration()).thenReturn(conf);
+        man.reloadConfiguration(conf);
+
+        // every domain is attempted, the failing one is not saved, the following ones (alphabetical order) still progress
+        man.run();
+        verify(store, times(3)).saveAcmeChallengeToken(any(), any());
+        assertCertificateState("localhost2", VERIFYING, 0, man);
+        assertCertificateState("localhost3", VERIFYING, 0, man);
+        verify(store, times(2)).saveCertificate(any());
+        verify(store, never()).saveCertificate(argThat(cd -> cd.getDomain().equals("localhost1")));
     }
 
     @Test

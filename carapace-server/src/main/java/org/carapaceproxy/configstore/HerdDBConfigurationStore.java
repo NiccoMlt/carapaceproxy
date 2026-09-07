@@ -144,8 +144,8 @@ public class HerdDBConfigurationStore implements ConfigurationStore {
     private static final String SELECT_FROM_ACME_CHALLENGE_TOKENS_TABLE = """
             SELECT data from %s WHERE id=?
             """.formatted(ACME_CHALLENGE_TOKENS_TABLE_NAME);
-    private static final String INSERT_INTO_ACME_CHALLENGE_TOKENS_TABLE = """
-            INSERT INTO %s(id, data) values (?, ?)
+    private static final String UPSERT_INTO_ACME_CHALLENGE_TOKENS_TABLE = """
+            UPSERT INTO %s(id, data) values (?, ?)
             """.formatted(ACME_CHALLENGE_TOKENS_TABLE_NAME);
     private static final String DELETE_FROM_ACME_CHALLENGE_TOKENS_TABLE = """
             DELETE from %s WHERE id=?
@@ -522,10 +522,10 @@ public class HerdDBConfigurationStore implements ConfigurationStore {
     @Override
     public void saveAcmeChallengeToken(String id, String data) {
         try (Connection con = datasource.getConnection();
-                PreparedStatement psInsert = con.prepareStatement(INSERT_INTO_ACME_CHALLENGE_TOKENS_TABLE)) {
-            psInsert.setString(1, id);
-            psInsert.setString(2, data);
-            psInsert.executeUpdate();
+                PreparedStatement psUpsert = con.prepareStatement(UPSERT_INTO_ACME_CHALLENGE_TOKENS_TABLE)) {
+            psUpsert.setString(1, id);
+            psUpsert.setString(2, data);
+            psUpsert.executeUpdate();
         } catch (Exception err) {
             LOG.error("Error while performing saving of ACME challenge token with id: {} data: {}", id, data, err);
             throw new ConfigurationStoreException(err);
