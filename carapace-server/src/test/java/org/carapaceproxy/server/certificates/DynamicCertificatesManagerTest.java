@@ -308,6 +308,70 @@ public class DynamicCertificatesManagerTest {
     }
 
     @Test
+    @Parameters({"0", "2"})
+    public void testRateLimitPerRun(int rateLimit) throws Exception {
+        // ACME mocking
+        ACMEClient ac = mock(ACMEClient.class);
+        Order o = mock(Order.class);
+        when(o.getLocation()).thenReturn(URI.create("https://localhost/index").toURL());
+        Login login = mock(Login.class);
+        when(login.bindOrder(any())).thenReturn(o);
+        when(ac.getLogin()).thenReturn(login);
+        when(ac.createOrderForDomain(any())).thenReturn(o);
+        Http01Challenge c = mock(Http01Challenge.class);
+        when(c.getToken()).thenReturn("");
+        when(c.getJSON()).thenReturn(JSON.parse("""
+                  {
+                      "url": "https://localhost/index",
+                      "type": "http-01",
+                      "token": "mytoken"
+                  }"""));
+        when(c.getAuthorization()).thenReturn("");
+        when(c.getError()).thenReturn(Optional.empty());
+        when(ac.getChallengesForOrder(any())).thenReturn(Map.of("domain", c));
+        when(ac.checkResponseForChallenge(any())).thenReturn(VALID);
+
+        HttpProxyServer parent = mock(HttpProxyServer.class);
+        when(parent.getListeners()).thenReturn(mock(Listeners.class));
+        DynamicCertificatesManager man = new DynamicCertificatesManager(parent);
+        man.attachGroupMembershipHandler(new NullGroupMembershipHandler());
+        Whitebox.setInternalState(man, ac);
+
+        // Store mocking: three certificates waiting to be ordered
+        ConfigurationStore store = mock(ConfigurationStore.class);
+        when(store.loadKeyPairForDomain(anyString())).thenReturn(KeyPairUtils.createKeyPair(DEFAULT_KEYPAIRS_SIZE));
+        Properties props = new Properties();
+        String[] domains = {"localhost1", "localhost2", "localhost3"};
+        for (int i = 0; i < domains.length; i++) {
+            when(store.loadCertificateForDomain(eq(domains[i]))).thenReturn(new CertificateData(domains[i], null, WAITING));
+            props.setProperty("certificate." + i + ".hostname", domains[i]);
+            props.setProperty("certificate." + i + ".mode", "acme");
+        }
+        man.setConfigurationStore(store);
+
+        // Manager setup
+        props.setProperty("dynamiccertificatesmanager.ratelimit", String.valueOf(rateLimit));
+        RuntimeServerConfiguration conf = new RuntimeServerConfiguration();
+        conf.configure(new PropertiesConfigurationStore(props));
+        when(parent.getCurrentConfiguration()).thenReturn(conf);
+        man.reloadConfiguration(conf);
+
+        // first run: the first two domains (alphabetical order) take the slots, the third is postponed
+        man.run();
+        assertCertificateState("localhost1", VERIFYING, 0, man);
+        assertCertificateState("localhost2", VERIFYING, 0, man);
+        assertCertificateState("localhost3", rateLimit == 0 ? VERIFYING : WAITING, 0, man);
+        verify(store, times(rateLimit == 0 ? 3 : 2)).saveCertificate(any());
+
+        // second run: the two in-flight certificates still take the slots, the third is postponed again
+        man.run();
+        assertCertificateState("localhost1", VERIFIED, 0, man);
+        assertCertificateState("localhost2", VERIFIED, 0, man);
+        assertCertificateState("localhost3", rateLimit == 0 ? VERIFIED : WAITING, 0, man);
+        verify(store, times(rateLimit == 0 ? 6 : 4)).saveCertificate(any());
+    }
+
+    @Test
     // A) record not created -> request failed
     // B) record created but not ready -> request failed after LIMIT attempts
     // C) record created and ready -> VERIFYING
