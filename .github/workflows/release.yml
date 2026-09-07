@@ -5,7 +5,7 @@ on:
     inputs:
       bump:
         required: true
-        description: Whether it should build a major release, minor release, or hotfix
+        description: 'major and minor cut a release branch from master, hotfix releases the release/* branch it runs on'
         type: choice
         options:
           - major
@@ -13,16 +13,23 @@ on:
           - hotfix
         default: minor
 
+# a release pushes commits, tags and packages: one at a time, never cancelled halfway
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
-  discussions: write
   packages: write
+
+env:
+  MAVEN_ARGS: --batch-mode --no-transfer-progress
 
 jobs:
   release:
-    if: ${{ github.ref_name == github.event.repository.default_branch || (inputs.bump == 'hotfix' && startsWith(github.ref_name, 'release/')) }}
     name: 'Perform ${{ inputs.bump }} release'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: 'Generate GitHub App token'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
@@ -55,53 +62,68 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: 'Verify Git remote'
-        run: |
-          git remote -v
-          git config --get remote.origin.url
-
       - id: compute_versions
         name: 'Compute versions and branch name'
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
-          bump="${{ inputs.bump }}"
-          major="$(./mvnw build-helper:parse-version help:evaluate -Dexpression=parsedVersion.majorVersion -q -DforceStdout)"
-          minor="$(./mvnw build-helper:parse-version help:evaluate -Dexpression=parsedVersion.minorVersion -q -DforceStdout)"
-          patch="$(./mvnw build-helper:parse-version help:evaluate -Dexpression=parsedVersion.incrementalVersion -q -DforceStdout)"
-          qualifier="$(./mvnw build-helper:parse-version help:evaluate -Dexpression=parsedVersion.qualifier -q -DforceStdout)"
+          version="$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)"
+          if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-SNAPSHOT$ ]]; then
+            echo "::error::Cannot release '${version}': expected MAJOR.MINOR.PATCH-SNAPSHOT"
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
 
-          case $bump in
+          case "$BUMP" in
           hotfix)
             branch_name="release/${major}.${minor}"
             release_version="${major}.${minor}.${patch}"
-            release_development_version="${major}.${minor}.$((patch + 1))-${qualifier}"
-            # master_development_version cannot be computed here, nor it is needed as this will run on release branch
+            release_development_version="${major}.${minor}.$((patch + 1))-SNAPSHOT"
+            # master_development_version is not needed: a hotfix runs on the release branch and leaves master alone
             ;;
           major)
-            new_major=$((major + 1))
-            branch_name="release/${new_major}.0"
-            release_version="${new_major}.0.0"
-            release_development_version="${new_major}.0.1-${qualifier}"
-            master_development_version="${new_major}.1.0-${qualifier}"
+            branch_name="release/$((major + 1)).0"
+            release_version="$((major + 1)).0.0"
+            release_development_version="$((major + 1)).0.1-SNAPSHOT"
+            master_development_version="$((major + 1)).1.0-SNAPSHOT"
             ;;
           minor)
-            new_minor=$((minor + 1))
             branch_name="release/${major}.${minor}"
             release_version="${major}.${minor}.0"
-            release_development_version="${major}.${minor}.1-${qualifier}"
-            master_development_version="${major}.${new_minor}.0-${qualifier}"
+            release_development_version="${major}.${minor}.1-SNAPSHOT"
+            master_development_version="${major}.$((minor + 1)).0-SNAPSHOT"
             ;;
           esac
           tag="v${release_version}"
+
+          if [ "$BUMP" = hotfix ]; then
+            if [ "$GITHUB_REF_NAME" != "$branch_name" ]; then
+              echo "::error::A hotfix of ${version} must run on ${branch_name}, not on ${GITHUB_REF_NAME}"
+              exit 1
+            fi
+          else
+            if [ "$GITHUB_REF_NAME" != master ]; then
+              echo "::error::A ${BUMP} release must run on master, not on ${GITHUB_REF_NAME}"
+              exit 1
+            fi
+            if git show-ref --verify --quiet "refs/remotes/origin/${branch_name}"; then
+              echo "::error::Branch ${branch_name} already exists"
+              exit 1
+            fi
+          fi
+
           {
             echo "branch_name=${branch_name}"
+            echo "tag=${tag}"
             echo "release_version=${release_version}"
             echo "release_development_version=${release_development_version}"
             echo "master_development_version=${master_development_version}"
-            echo "tag=${tag}"
           } >> "$GITHUB_OUTPUT"
 
-      - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
-        name: 'Create ${{ inputs.bump }} release branch ${{ steps.compute_versions.outputs.branch_name }}'
+      - if: ${{ inputs.bump != 'hotfix' }}
+        name: 'Create release branch ${{ steps.compute_versions.outputs.branch_name }}'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -109,8 +131,9 @@ jobs:
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.master_development_version }}
 
-      - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
-        name: 'Checkout ${{ inputs.bump }} release branch ${{ steps.compute_versions.outputs.branch_name }}'
+      # the Git identity and the gh credential helper configured above survive this checkout
+      - if: ${{ inputs.bump != 'hotfix' }}
+        name: 'Checkout release branch ${{ steps.compute_versions.outputs.branch_name }}'
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ steps.compute_versions.outputs.branch_name }}
@@ -118,13 +141,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
-        name: 'Reconfigure Git after branch checkout'
-        uses: ./.github/actions/configure-git
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: 'Prepare release ${{ inputs.bump }} version ${{ steps.compute_versions.outputs.release_version }} on branch ${{ steps.compute_versions.outputs.branch_name }}'
+      - name: 'Prepare release ${{ steps.compute_versions.outputs.release_version }} on ${{ steps.compute_versions.outputs.branch_name }}'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -139,14 +156,15 @@ jobs:
         run: |
           ./mvnw release:perform
 
-      - name: 'Create GitHub Release'
+      - name: 'Create GitHub Release ${{ steps.compute_versions.outputs.tag }}'
         id: create_release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.compute_versions.outputs.tag }}
           name: Release ${{ steps.compute_versions.outputs.release_version }}
-          draft: false
-          prerelease: false
-          files: carapace-server/target/carapace-server-*
+          # latest = highest version, so a hotfix of an older minor does not outrank the current one
+          make_latest: legacy
+          fail_on_unmatched_files: true
+          files: |
+            target/checkout/carapace-server/target/carapace-server-*.jar
+            target/checkout/carapace-server/target/carapace-server-*.zip
