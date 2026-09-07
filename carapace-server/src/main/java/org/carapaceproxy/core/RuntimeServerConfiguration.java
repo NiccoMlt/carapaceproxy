@@ -142,6 +142,7 @@ public class RuntimeServerConfiguration {
     private String localCertificatesStorePath;
     private Set<String> localCertificatesStorePeersIds;
     private int maxAttempts = DEFAULT_MAX_CONNECTIONS_PER_ENDPOINT;
+    private int dynamicCertificatesManagerRateLimit = 300;
     private Set<String> alwaysCachedExtensions = Set.of("png", "gif", "jpg", "jpeg", "js", "css", "woff2", "webp");
 
     public RuntimeServerConfiguration() {
@@ -307,6 +308,8 @@ public class RuntimeServerConfiguration {
 
         maxAttempts = properties.getInt("dynamiccertificatesmanager.errors.maxattempts", maxAttempts);
         LOG.info("dynamiccertificatesmanager.errors.maxattempts={}", maxAttempts);
+        dynamicCertificatesManagerRateLimit = properties.getInt("dynamiccertificatesmanager.ratelimit", dynamicCertificatesManagerRateLimit);
+        LOG.info("dynamiccertificatesmanager.ratelimit={}", dynamicCertificatesManagerRateLimit);
 
         alwaysCachedExtensions = properties.getValues("cache.cachealways", alwaysCachedExtensions);
         LOG.info("cache.cachealways={}", alwaysCachedExtensions);

@@ -288,12 +288,22 @@ public class DynamicCertificatesManager implements Runnable {
                 .sorted(Entry.comparingByKey())
                 .map(Entry::getValue)
                 .toList();
+        final int rateLimit = getConfig().getDynamicCertificatesManagerRateLimit();
+        int acmeSteps = 0;
         for (CertificateData data : _certificates) {
             var updateCertificate = true;
             final var domain = data.getDomain();
             try {
                 // this has to be always fetch from db!
                 CertificateData cert = loadOrCreateDynamicCertificateForDomain(domain, data.getSubjectAltNames(), false, data.getDaysBeforeRenewal());
+                if (isAcmeStep(cert)) {
+                    // domains are sorted, so the first N take the slots and the window slides as they become AVAILABLE
+                    if (rateLimit > 0 && acmeSteps >= rateLimit) {
+                        LOG.debug("Rate limit of {} ACME steps per run reached, domain {} postponed to next run", rateLimit, domain);
+                        continue;
+                    }
+                    acmeSteps++;
+                }
                 switch (cert.getState()) {
                     // certificate waiting to be issues/renew
                     case WAITING -> startCertificateProcessing(domain, cert);
@@ -603,6 +613,20 @@ public class DynamicCertificatesManager implements Runnable {
 
     private RuntimeServerConfiguration getConfig() {
         return server.getCurrentConfiguration();
+    }
+
+    /**
+     * Tell whether the next lifecycle step of the certificate contacts the ACME server.
+     *
+     * @param cert the certificate as loaded from the store
+     * @return true if the step performs an ACME call (new order, challenge check, finalization, order check)
+     */
+    private boolean isAcmeStep(final CertificateData cert) {
+        return switch (cert.getState()) {
+            case WAITING, VERIFYING, VERIFIED, ORDERING -> true;
+            case DOMAIN_UNREACHABLE -> cert.getAttemptsCount() <= getConfig().getMaxAttempts();
+            default -> false;
+        };
     }
 
     /**
