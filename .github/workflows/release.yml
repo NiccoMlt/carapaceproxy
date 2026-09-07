@@ -40,7 +40,7 @@ jobs:
           permission-contents: write
 
       - name: 'Checkout ${{ github.ref_name }} branch'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
@@ -48,14 +48,12 @@ jobs:
           fetch-depth: 0
 
       - name: 'Set up JDK 21'
-        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
           server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
 
       - name: 'Configure Git'
         uses: ./.github/actions/configure-git
@@ -134,7 +132,7 @@ jobs:
       # the Git identity and the gh credential helper configured above survive this checkout
       - if: ${{ inputs.bump != 'hotfix' }}
         name: 'Checkout release branch ${{ steps.compute_versions.outputs.branch_name }}'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.compute_versions.outputs.branch_name }}
           token: ${{ steps.app-token.outputs.token }}
@@ -158,7 +156,7 @@ jobs:
 
       - name: 'Create GitHub Release ${{ steps.compute_versions.outputs.tag }}'
         id: create_release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ steps.compute_versions.outputs.tag }}
           name: Release ${{ steps.compute_versions.outputs.release_version }}
