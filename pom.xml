@@ -443,9 +443,6 @@
                     <projectVersionPolicyId>SemVerVersionPolicy</projectVersionPolicyId>
                     <tagNameFormat>v@{project.version}</tagNameFormat>
                     <scmCommentPrefix>chore(release):</scmCommentPrefix>
-                    <updateBranchVersions>true</updateBranchVersions>
-                    <updateVersionsToSnapshot>true</updateVersionsToSnapshot>
-                    <updateWorkingCopyVersions>true</updateWorkingCopyVersions>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
                     <arguments>-DskipTests=true</arguments>
                 </configuration>

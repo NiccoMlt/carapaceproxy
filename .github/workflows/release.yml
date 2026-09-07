@@ -87,7 +87,7 @@ jobs:
             new_minor=$((minor + 1))
             branch_name="release/${major}.${minor}"
             release_version="${major}.${minor}.0"
-            release_development_version="${major}.${new_minor}.1-${qualifier}"
+            release_development_version="${major}.${minor}.1-${qualifier}"
             master_development_version="${major}.${new_minor}.0-${qualifier}"
             ;;
           esac
@@ -107,7 +107,6 @@ jobs:
         run: |
           ./mvnw release:clean release:branch \
               -DbranchName=${{ steps.compute_versions.outputs.branch_name }} \
-              -DreleaseVersion=${{ steps.compute_versions.outputs.release_version }} \
               -DdevelopmentVersion=${{ steps.compute_versions.outputs.master_development_version }}
 
       - if: ${{ inputs.bump == 'major' || inputs.bump == 'minor' }}
