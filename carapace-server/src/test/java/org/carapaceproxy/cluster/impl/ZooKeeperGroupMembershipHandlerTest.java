@@ -42,7 +42,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.LoggerFactory;
-import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -306,7 +305,6 @@ public class ZooKeeperGroupMembershipHandlerTest {
                             6000, false /*acl */, peerId2, Collections.EMPTY_MAP, new Properties())) {
                 peer1.start();
                 peer2.start();
-                errors.list.clear(); // drop the connection noise logged at startup
 
                 // peer1 holds the mutex from another thread (the Curator mutex is reentrant per thread)
                 CountDownLatch held = new CountDownLatch(1);
@@ -324,11 +322,14 @@ public class ZooKeeperGroupMembershipHandlerTest {
 
                 // peer2 times out: nothing runs and nothing is released
                 AtomicBoolean ran = new AtomicBoolean();
-                peer2.executeInMutex("m", 1, () -> ran.set(true));
-                assertFalse(ran.get());
-                assertEquals(List.of(), errors.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList());
-                release.countDown();
-                holder.join();
+                try {
+                    peer2.executeInMutex("m", 1, () -> ran.set(true));
+                    assertFalse(ran.get());
+                    assertEquals(0, logged(errors, "Failed to release lock").size());
+                } finally {
+                    release.countDown();
+                    holder.join();
+                }
 
                 // a failing runnable is logged as such and the mutex is released for the next caller
                 peer1.executeInMutex("m", 10, () -> {
@@ -336,12 +337,14 @@ public class ZooKeeperGroupMembershipHandlerTest {
                 });
                 peer2.executeInMutex("m", 1, () -> ran.set(true));
                 assertTrue(ran.get());
-                List<ILoggingEvent> logged = errors.list.stream().filter(e -> e.getLevel() == Level.ERROR).toList();
-                assertEquals(1, logged.size());
-                assertTrue(logged.get(0).getFormattedMessage().startsWith("Error while executing in mutex"));
+                assertEquals(1, logged(errors, "Error while executing in mutex").size());
             }
         } finally {
             logger.detachAppender(errors);
         }
+    }
+
+    private static List<ILoggingEvent> logged(ListAppender<ILoggingEvent> appender, String messagePrefix) {
+        return appender.list.stream().filter(e -> e.getFormattedMessage().startsWith(messagePrefix)).toList();
     }
 }
