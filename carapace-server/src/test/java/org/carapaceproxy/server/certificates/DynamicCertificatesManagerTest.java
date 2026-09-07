@@ -250,7 +250,8 @@ public class DynamicCertificatesManagerTest {
                     man.getCertificateDataForDomain(d1).getMessage()
             );
             man.run();
-            verify(store, times(++saveCounter)).saveCertificate(any());
+            // a certificate parked past the attempts limit is left alone, nothing is saved
+            verify(store, times(maxedOutTrials ? saveCounter : ++saveCounter)).saveCertificate(any());
             assertCertificateState(d1, maxedOutTrials ? REQUEST_FAILED : WAITING, expectedCycleCount, man);
             return;
         } else { // VERIFYING
@@ -260,7 +261,8 @@ public class DynamicCertificatesManagerTest {
             if (runCase.equals("order_finalization_error")) {
                 assertCertificateState(d1, REQUEST_FAILED, ++expectedCycleCount, man);
                 man.run();
-                verify(store, times(++saveCounter)).saveCertificate(any());
+                // a certificate parked past the attempts limit is left alone, nothing is saved
+                verify(store, times(maxedOutTrials ? saveCounter : ++saveCounter)).saveCertificate(any());
                 assertCertificateState(d1, maxedOutTrials ? REQUEST_FAILED : WAITING, expectedCycleCount, man);
                 return;
             } else {
@@ -282,7 +284,8 @@ public class DynamicCertificatesManagerTest {
         );
         man.run();
         if (runCase.equals("order_response_error")) { // REQUEST_FAILED
-            verify(store, times(++saveCounter)).saveCertificate(any());
+            // a certificate parked past the attempts limit is left alone, nothing is saved
+            verify(store, times(maxedOutTrials ? saveCounter : ++saveCounter)).saveCertificate(any());
             assertCertificateState(d1, maxedOutTrials ? REQUEST_FAILED : WAITING, expectedCycleCount, man);
         } else { // AVAILABLE
             DynamicCertificateState state = man.getStateOfCertificate(d1);
@@ -838,5 +841,50 @@ public class DynamicCertificatesManagerTest {
             assertCertificateState(domain, ORDERING, 0, man);
             verify(store, never()).saveCertificate(any());
         }
+    }
+
+    @Test
+    public void testParkedCertificatesAreNotSaved() throws Exception {
+        HttpProxyServer parent = mock(HttpProxyServer.class);
+        when(parent.getListeners()).thenReturn(mock(Listeners.class));
+        DynamicCertificatesManager man = new DynamicCertificatesManager(parent);
+        man.attachGroupMembershipHandler(new NullGroupMembershipHandler());
+        Whitebox.setInternalState(man, mock(ACMEClient.class));
+
+        // Store mocking: two certificates parked past the attempts limit, one still within it
+        ConfigurationStore store = mock(ConfigurationStore.class);
+        CertificateData unreachable = new CertificateData("localhost1", null, DOMAIN_UNREACHABLE);
+        unreachable.setAttemptsCount(MAX_ATTEMPTS + 1);
+        CertificateData failed = new CertificateData("localhost2", null, REQUEST_FAILED);
+        failed.setAttemptsCount(MAX_ATTEMPTS + 1);
+        CertificateData retriable = new CertificateData("localhost3", null, REQUEST_FAILED);
+        retriable.setAttemptsCount(MAX_ATTEMPTS);
+        Properties props = new Properties();
+        int i = 0;
+        for (CertificateData cd : List.of(unreachable, failed, retriable)) {
+            when(store.loadCertificateForDomain(eq(cd.getDomain()))).thenReturn(cd);
+            props.setProperty("certificate." + i + ".hostname", cd.getDomain());
+            props.setProperty("certificate." + i + ".mode", "acme");
+            i++;
+        }
+        man.setConfigurationStore(store);
+
+        // Manager setup
+        props.setProperty("dynamiccertificatesmanager.errors.maxattempts", String.valueOf(MAX_ATTEMPTS));
+        RuntimeServerConfiguration conf = new RuntimeServerConfiguration();
+        conf.configure(new PropertiesConfigurationStore(props));
+        when(parent.getCurrentConfiguration()).thenReturn(conf);
+        man.reloadConfiguration(conf);
+
+        man.run();
+
+        // parked certificates are left alone: nothing to persist, no cluster-wide reload
+        assertCertificateState("localhost1", DOMAIN_UNREACHABLE, MAX_ATTEMPTS + 1, man);
+        assertCertificateState("localhost2", REQUEST_FAILED, MAX_ATTEMPTS + 1, man);
+        verify(store, never()).saveCertificate(unreachable);
+        verify(store, never()).saveCertificate(failed);
+        // the one within the limit is retried as before
+        assertCertificateState("localhost3", WAITING, MAX_ATTEMPTS, man);
+        verify(store, times(1)).saveCertificate(retriable);
     }
 }

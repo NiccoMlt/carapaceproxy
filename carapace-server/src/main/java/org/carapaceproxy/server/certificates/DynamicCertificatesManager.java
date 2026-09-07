@@ -313,6 +313,8 @@ public class DynamicCertificatesManager implements Runnable {
                     case DOMAIN_UNREACHABLE -> {
                         if (cert.getAttemptsCount() <= getConfig().getMaxAttempts()) {
                             startCertificateProcessing(domain, cert);
+                        } else {
+                            updateCertificate = false; // parked until a manual reset, nothing to persist
                         }
                     }
                     // waiting for dns propagation for all dns challenges
@@ -357,6 +359,8 @@ public class DynamicCertificatesManager implements Runnable {
                         if (cert.getAttemptsCount() <= getConfig().getMaxAttempts()){
                             LOG.info("Certificate issuing for domain: {} current status is FAILED, setting status=WAITING again.", domain);
                             cert.step(WAITING);
+                        } else {
+                            updateCertificate = false; // parked until a manual reset, nothing to persist
                         }
                     }
                     // certificate saved/available/not expired
