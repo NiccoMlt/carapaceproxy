@@ -23,6 +23,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import java.util.Properties;
 import org.apache.curator.test.TestingServer;
+import org.carapaceproxy.cluster.GroupMembershipHandler;
+import org.carapaceproxy.utils.CarapaceVersion;
 import org.carapaceproxy.utils.RawHttpClient;
 import org.junit.Test;
 
@@ -40,6 +42,10 @@ public class ClusterReconfigTest extends UseAdminServer {
             configuration.put("db.bookie.allowLoopback", "true");
 
             startServer(configuration);
+
+            // every peer advertises its version, so a half-upgraded cluster is visible from any node
+            final GroupMembershipHandler membership = server.getGroupMembershipHandler();
+            assertEquals(CarapaceVersion.VERSION, membership.loadInfoForPeer(membership.getLocalPeer()).get("peer_version"));
 
             try (RawHttpClient client = new RawHttpClient("localhost", 8761)) {
                 String body = "connectionsmanager.connecttimeout=8000\n"
