@@ -26,6 +26,11 @@
             </router-link>
         </ul>
 
+        <div id="sidebar-version" :title="versions.join(', ')">
+            <font-awesome-icon v-if="collapsed" icon="circle-info" fixed-width></font-awesome-icon>
+            <div v-else v-for="line in versions" :key="line">{{ line }}</div>
+        </div>
+
         <div id="sidebar-toogle-button" @click="toggleSidebar()">
             <font-awesome-icon icon="angle-right" :rotation="collapsed ? 0 : 180"></font-awesome-icon>
             <font-awesome-icon icon="angle-right" :rotation="collapsed ? 0 : 180"></font-awesome-icon>
@@ -34,6 +39,9 @@
 </template>
 
 <script>
+import { doGet } from "../serverapi";
+import { UI_VERSION, UI_COMMIT, formatVersion } from "../version";
+
 export default {
     name: "Sidebar",
     props: {
@@ -41,12 +49,24 @@ export default {
     },
     data() {
         return {
-            collapsed: false
+            collapsed: false,
+            server: null
         };
     },
     created() {
         window.addEventListener("resize", this.handleResize);
         this.handleResize();
+        doGet("/api/version", data => {
+            this.server = data;
+        });
+    },
+    computed: {
+        // The server line appears only when web/ and lib/ come from different builds
+        versions() {
+            const ui = formatVersion(UI_VERSION, UI_COMMIT);
+            const server = this.server ? formatVersion(this.server.version, this.server.commit) : ui;
+            return server === ui ? ["Carapace " + ui] : ["UI " + ui, "Server " + server];
+        }
     },
     destroyed() {
         window.removeEventListener("resize", this.handleResize);
@@ -99,10 +119,27 @@ export default {
         }
     }
 
+    #sidebar-version {
+        position: absolute;
+        bottom: 2rem;
+        left: 0;
+        right: 0;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+        color: $sidebar-elements;
+        opacity: 0.8;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
     /* sidebar collapsed */
     &.collapsed {
         min-width: $sidebar-collapsed-width;
         max-width: $sidebar-collapsed-width;
+
+        #sidebar-version {
+            text-align: center;
+        }
 
         #sidebar-toogle-button {
             svg {
@@ -120,7 +157,7 @@ export default {
     position: absolute;
     top: 0;
     right: 0;
-    bottom: 2rem;
+    bottom: 5rem;
     left: 0;
     overflow-x: hidden;
     padding-top: 0.5rem;

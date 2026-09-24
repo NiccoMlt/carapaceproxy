@@ -20,6 +20,7 @@
 
 <script>
 import { doGet } from "../serverapi";
+import { formatVersion } from "../version";
 export default {
     name: "Peers",
     data() {
@@ -37,6 +38,14 @@ export default {
             return [
                 { key: "id", label: "ID", sortable: true },
                 { key: "description", label: "Description", sortable: true },
+                // empty for peers that predate the version in the peer info: the sign of a half-upgraded cluster
+                {
+                    key: "version",
+                    label: "Version",
+                    sortable: true,
+                    sortByFormatted: true,
+                    formatter: (value, key, item) => formatVersion(item.info["peer_version"], item.info["peer_commit"])
+                },
                 { key: "info", label: "Admin Server UI", sortable: true }
             ];
         }
